@@ -205,6 +205,7 @@ SPEC_CONTENT="$SPEC_CONTENT
 /usr/bin/vyoma
 /usr/bin/cloud-hypervisor
 /etc/systemd/system/vyomad.service
+/etc/systemd/system/vyoma-net.service
 /usr/lib/vyoma/cni
 /var/lib/vyoma/bin/vmlinux
 /var/lib/vyoma/bin/cloud-hypervisor"

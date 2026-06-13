@@ -54,7 +54,7 @@ verify_checksum() {
 echo "Building Vyoma v${VERSION} for Debian..."
 
 # 1. Build Binaries
-"$CARGO" build --release --bin vyomad --bin vyoma
+"$CARGO" build --release --bin vyomad --bin vyoma --bin vyoma-agent-vm
 
 # 2. Prepare Directory Structure
 mkdir -p "${WORK_DIR}/usr/bin"
@@ -157,6 +157,7 @@ fi
 # 4. Copy Assets
 cp target/release/vyomad "${WORK_DIR}/usr/bin/"
 cp target/release/vyoma "${WORK_DIR}/usr/bin/"
+cp target/release/vyoma-agent-vm "${WORK_DIR}/usr/bin/"
 cp cloud-hypervisor "${WORK_DIR}/usr/bin/cloud-hypervisor"
 cp packaging/systemd/vyomad.service "${WORK_DIR}/etc/systemd/system/"
 cp packaging/systemd/vyoma-net.service "${WORK_DIR}/etc/systemd/system/"

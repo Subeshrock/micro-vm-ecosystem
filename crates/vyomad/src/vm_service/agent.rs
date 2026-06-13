@@ -16,14 +16,46 @@ pub async fn prepare_agent(
     let initramfs_path = vm_dir.join("initramfs.cpio.gz");
     let init_script = generate_init_script(_config);
 
-    let agent_binary = PathBuf::from("/usr/bin/vyoma-agent-vm");
-    let agent_path = if agent_binary.exists() {
-        Some(&agent_binary as &Path)
+    let agent_binary_usr = PathBuf::from("/usr/bin/vyoma-agent-vm");
+    let agent_binary_lib = PathBuf::from("/usr/lib/vyoma/vyoma-agent-vm");
+    let agent_binary_data = PathBuf::from(&_state.data_dir).join("bin").join("vyoma-agent-vm");
+
+    let agent_path = if agent_binary_usr.exists() {
+        Some(&agent_binary_usr as &Path)
+    } else if agent_binary_lib.exists() {
+        Some(&agent_binary_lib as &Path)
+    } else if agent_binary_data.exists() {
+        Some(&agent_binary_data as &Path)
+    } else if let Ok(path) = which::which("vyoma-agent-vm") {
+        // Fallback to searching PATH (requires which crate or just a simple check)
+        // Since we don't want to add a new dependency if we can avoid it, let's just log a warning.
+        None
     } else {
         None
     };
 
-    vyoma_core::initramfs::create_initramfs(&init_script, agent_path, &initramfs_path)
+    if agent_path.is_none() {
+        tracing::warn!("vyoma-agent-vm binary not found in expected locations. VM will boot without agent capabilities.");
+    }
+
+    // Try to find it in PATH using a simple which-like implementation if we really need it,
+    // but typically standard paths are enough. Let's add a basic PATH search.
+    let mut resolved_agent_path = agent_path;
+    let mut env_path_buf = PathBuf::new();
+    if resolved_agent_path.is_none() {
+        if let Ok(paths) = std::env::var("PATH") {
+            for p in std::env::split_paths(&paths) {
+                let candidate = p.join("vyoma-agent-vm");
+                if candidate.exists() {
+                    env_path_buf = candidate;
+                    resolved_agent_path = Some(&env_path_buf as &Path);
+                    break;
+                }
+            }
+        }
+    }
+
+    vyoma_core::initramfs::create_initramfs(&init_script, resolved_agent_path, &initramfs_path)
         .context("Failed to create initramfs")?;
 
     info!("Agent prepared with initramfs at {:?}", initramfs_path);

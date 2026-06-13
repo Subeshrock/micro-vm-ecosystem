@@ -56,11 +56,12 @@ mkdir -p "${WORK_DIR}"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 mkdir -p "${SOURCES_DIR}"
 
 # 1. Build Binaries
-"$CARGO" build --release --bin vyomad --bin vyoma
+"$CARGO" build --release --bin vyomad --bin vyoma --bin vyoma-agent-vm
 
 # 2. Copy binaries to source dir
 cp target/release/vyomad "${SOURCES_DIR}/"
 cp target/release/vyoma "${SOURCES_DIR}/"
+cp target/release/vyoma-agent-vm "${SOURCES_DIR}/"
 
 # 3. Fetch Dependencies with checksum verification
 echo "Fetching dependencies..."
@@ -173,6 +174,7 @@ mkdir -p %{buildroot}/usr/lib/vyoma
 mkdir -p %{buildroot}/etc/systemd/system
 install -m 755 vyomad %{buildroot}/usr/bin/vyomad
 install -m 755 vyoma %{buildroot}/usr/bin/vyoma
+install -m 755 vyoma-agent-vm %{buildroot}/usr/bin/vyoma-agent-vm
 install -m 755 cloud-hypervisor %{buildroot}/usr/bin/cloud-hypervisor
 install -m 644 vyomad.service %{buildroot}/etc/systemd/system/vyomad.service
 install -m 644 vyoma-net.service %{buildroot}/etc/systemd/system/vyoma-net.service
@@ -203,6 +205,7 @@ SPEC_CONTENT="$SPEC_CONTENT
 %files
 /usr/bin/vyomad
 /usr/bin/vyoma
+/usr/bin/vyoma-agent-vm
 /usr/bin/cloud-hypervisor
 /etc/systemd/system/vyomad.service
 /etc/systemd/system/vyoma-net.service

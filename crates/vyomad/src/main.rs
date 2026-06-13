@@ -316,6 +316,7 @@ async fn main() {
         .route("/pause/:id", post(handlers::pause_vm))
         .route("/resume/:id", post(handlers::resume_vm))
         .route("/ps", get(handlers::list_vms))
+        .route("/exec/:id", post(handlers::exec_in_vm))
         .route("/commit/:id", post(handlers::commit_vm))
         .route("/snapshot/:id", post(handlers::snapshot_vm))
         .route("/history/:id", get(handlers::history_vm))

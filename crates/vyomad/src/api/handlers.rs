@@ -163,6 +163,87 @@ use vyoma_core::layers::LayerManager;
 use vyoma_core::network::NetworkManager;
 use vyoma_core::oci::OciManager;
 use vyoma_core::storage::StorageManager;
+use vyoma_agent_protocol::{AgentRequest, AgentResponse};
+
+#[derive(Deserialize)]
+pub struct ExecRequest {
+    pub command: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct ExecResponse {
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: i32,
+}
+
+pub async fn exec_in_vm(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(payload): Json<ExecRequest>,
+) -> Result<Json<ExecResponse>, (StatusCode, String)> {
+    info!("Request to execute command in VM: {}", id);
+
+    let vm_ip = {
+        let vms = state.vms.lock().await;
+        if let Some(vm_arc) = vms.get(&id) {
+            let vm = vm_arc.lock().await;
+            vm.ip_address.clone()
+        } else {
+            return Err((StatusCode::NOT_FOUND, "VM not found".to_string()));
+        }
+    };
+
+    // Clean IP in case of CIDR notation
+    let target_ip = vm_ip.split('/').next().unwrap_or(&vm_ip).to_string();
+
+    let target_addr = format!("{}:9999", target_ip);
+    let mut stream = match tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        tokio::net::TcpStream::connect(&target_addr),
+    )
+    .await
+    {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => return Err((StatusCode::SERVICE_UNAVAILABLE, format!("Connection failed: {}", e))),
+        Err(_) => return Err((StatusCode::GATEWAY_TIMEOUT, "Connection timeout to agent".to_string())),
+    };
+
+    let req = AgentRequest::ExecCommand {
+        cmd: payload.command,
+        env: HashMap::new(),
+        workdir: None,
+    };
+
+    let req_json = serde_json::to_vec(&req).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let len_prefix = (req_json.len() as u32).to_be_bytes();
+    
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    stream.write_all(&len_prefix).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    stream.write_all(&req_json).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let mut resp_len_buf = [0u8; 4];
+    stream.read_exact(&mut resp_len_buf).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let resp_len = u32::from_be_bytes(resp_len_buf) as usize;
+
+    let mut resp_buf = vec![0u8; resp_len];
+    stream.read_exact(&mut resp_buf).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let resp: AgentResponse = serde_json::from_slice(&resp_buf).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    match resp {
+        AgentResponse::ExecOutput { stdout, stderr, exit_code } => {
+            Ok(Json(ExecResponse {
+                stdout: String::from_utf8_lossy(&stdout).into_owned(),
+                stderr: String::from_utf8_lossy(&stderr).into_owned(),
+                exit_code,
+            }))
+        }
+        AgentResponse::Error { message } => Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Agent error: {}", message))),
+        _ => Err((StatusCode::INTERNAL_SERVER_ERROR, "Unexpected agent response".to_string())),
+    }
+}
 
 pub async fn run_vm(
     State(state): State<AppState>,

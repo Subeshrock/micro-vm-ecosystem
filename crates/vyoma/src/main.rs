@@ -457,8 +457,8 @@ async fn main() -> Result<()> {
             handle_simple_response(resp, &daemon_url).await?;
         }
         Commands::Exec { id, cmd } => {
-            // 1. Resolve IP
-            let mut target_ip = String::new();
+            // 1. Resolve ID (if Name provided)
+            let mut target_id = id.clone();
             let resp = client.get(format!("{}/ps", daemon_url)).send().await;
             if let Ok(r) = resp {
                 if let Ok(list) = r.json::<ListResponse>().await {
@@ -468,31 +468,57 @@ async fn main() -> Result<()> {
                             || vm.labels.get("vyoma.service").map(|s| s.as_str())
                                 == Some(id.as_str())
                         {
-                            target_ip = vm
-                                .ip_address
-                                .split('/')
-                                .next()
-                                .unwrap_or(&vm.ip_address)
-                                .to_string();
+                            target_id = vm.id;
                             break;
                         }
                     }
                 }
             }
-            if target_ip.is_empty() {
-                error!("VM '{}' not found or has no IP.", id);
-                return Ok(());
-            }
 
-            info!("Executing command via SSH on {}...", target_ip);
-            let _ = std::process::Command::new("ssh")
-                .arg("-o")
-                .arg("StrictHostKeyChecking=no")
-                .arg("-o")
-                .arg("UserKnownHostsFile=/dev/null")
-                .arg(format!("root@{}", target_ip))
-                .args(cmd)
-                .status(); // Interactive if cmd is empty?
+            let payload = serde_json::json!({
+                "command": cmd
+            });
+
+            info!("Executing command in VM {}...", target_id);
+            let resp = client
+                .post(format!("{}/exec/{}", daemon_url, target_id))
+                .json(&payload)
+                .send()
+                .await;
+
+            match resp {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        #[derive(Deserialize)]
+                        struct ExecResp {
+                            stdout: String,
+                            stderr: String,
+                            exit_code: i32,
+                        }
+
+                        if let Ok(exec_result) = response.json::<ExecResp>().await {
+                            if !exec_result.stdout.is_empty() {
+                                print!("{}", exec_result.stdout);
+                            }
+                            if !exec_result.stderr.is_empty() {
+                                eprint!("{}", exec_result.stderr);
+                            }
+                            std::process::exit(exec_result.exit_code);
+                        } else {
+                            error!("Failed to parse execution response");
+                            std::process::exit(1);
+                        }
+                    } else {
+                        let error_msg = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                        error!("Execution failed: {}", error_msg);
+                        std::process::exit(1);
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to connect to daemon at {}: {}", daemon_url, e);
+                    std::process::exit(1);
+                }
+            }
         }
         Commands::Restart { id } => {
             // 1. Resolve ID (if Name provided)

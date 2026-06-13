@@ -1,7 +1,7 @@
 # Changelog
 
 ## [0.6.0] - Upcoming (The Polish Update)
-- **Lifecycle**: `vyoma restart` (Stop/Run replacement), `vyoma exec` (SSH wrapper).
+- **Lifecycle**: `vyoma restart` (Stop/Run replacement), `vyoma exec` (Agent-based HTTP channel instead of SSH).
 - **Logging**: `vyoma logs <service>` support.
 - **Inspect**: API for inspecting VM details.
 

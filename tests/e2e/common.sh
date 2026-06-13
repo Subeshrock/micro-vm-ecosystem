@@ -193,4 +193,3 @@ wait_for_vm_state_from_cli() {
     echo -e "${RED}Timeout: VM $vm_id did not reach state $expected_state within ${timeout}s${NC}"
     return 1
 }
-}

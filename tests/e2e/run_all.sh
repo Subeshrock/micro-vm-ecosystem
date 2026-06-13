@@ -52,5 +52,7 @@ run_test ./tests/e2e/08_snapshot_restore.sh
 run_test ./tests/e2e/09_port_forwarding.sh
 run_test ./tests/e2e/10_volume_mount.sh
 run_test ./tests/e2e/11_attestation.sh
+run_test ./tests/e2e/11_migration.sh
+run_test ./tests/e2e/12_exec.sh
 
 echo "Suite Completed."

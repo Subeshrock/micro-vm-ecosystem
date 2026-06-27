@@ -55,22 +55,21 @@ pub fn drop_privileges() -> Result<()> {
         Capability::CAP_NET_BIND_SERVICE,
     ].iter().cloned().collect();
 
-    info!("Setting bounding set capabilities...");
-    if let Err(e) = caps::set(None, CapSet::Bounding, &allowed_caps) {
-        warn!("Bounding set not supported (containerized?): {:?}", e);
-    }
-
-    info!("Setting ambient capabilities...");
-    if let Err(e) = caps::set(None, CapSet::Ambient, &allowed_caps) {
-        warn!("Ambient set not supported (containerized?): {:?}", e);
-    }
-
-    info!("Setting inheritable capabilities...");
-    if let Err(e) = caps::set(None, CapSet::Inheritable, &allowed_caps) {
-        warn!("Inheritable set not supported (containerized?): {:?}", e);
+    info!("Setting PR_SET_KEEPCAPS to preserve capabilities across setuid...");
+    unsafe {
+        if libc::prctl(libc::PR_SET_KEEPCAPS, 1, 0, 0, 0) != 0 {
+            warn!("Failed to set PR_SET_KEEPCAPS: {}", std::io::Error::last_os_error());
+        }
     }
 
     // Note: Preserving supplementary groups (kvm, disk) for access to /dev/kvm and /dev/mapper/control
+    info!("Initializing supplementary groups for vyoma...");
+    unsafe {
+        let username_c = std::ffi::CString::new(TARGET_USER).unwrap();
+        if libc::initgroups(username_c.as_ptr(), vyoma_gid) != 0 {
+            warn!("Failed to initialize supplementary groups: {}", std::io::Error::last_os_error());
+        }
+    }
 
     info!("Setting group to vyoma ({})...", vyoma_gid);
     unsafe {
@@ -88,6 +87,23 @@ pub fn drop_privileges() -> Result<()> {
                 std::io::Error::last_os_error().to_string()
             ).into());
         }
+    }
+
+    info!("Applying capabilities after setuid...");
+    
+    info!("Setting inheritable capabilities...");
+    if let Err(e) = caps::set(None, CapSet::Inheritable, &allowed_caps) {
+        warn!("Inheritable set not supported (containerized?): {:?}", e);
+    }
+    
+    info!("Setting effective capabilities...");
+    if let Err(e) = caps::set(None, CapSet::Effective, &allowed_caps) {
+        warn!("Effective set not supported (containerized?): {:?}", e);
+    }
+
+    info!("Setting ambient capabilities...");
+    if let Err(e) = caps::set(None, CapSet::Ambient, &allowed_caps) {
+        warn!("Ambient set not supported (containerized?): {:?}", e);
     }
 
     let current_uid = unsafe { libc::geteuid() };

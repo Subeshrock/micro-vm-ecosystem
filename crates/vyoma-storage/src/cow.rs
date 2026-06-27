@@ -43,8 +43,18 @@ impl LoopManager {
         
         let ld = self.control.next_free().map_err(|e| StorageError::Io(e))?;
         
-        // Ensure read/write
-        ld.with().read_only(false).attach(file).map_err(|e| StorageError::Io(e))?;
+        // Ensure read/write with retry for udev race condition
+        let mut retries = 0;
+        loop {
+            match ld.with().read_only(false).attach(file) {
+                Ok(_) => break,
+                Err(e) if e.raw_os_error() == Some(13) && retries < 50 => {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                    retries += 1;
+                }
+                Err(e) => return Err(StorageError::Io(e)),
+            }
+        }
         
         let loop_path = ld.path().unwrap_or_else(|| PathBuf::from(""));
         Ok(LoopDevice::new(loop_path, Some(ld)))

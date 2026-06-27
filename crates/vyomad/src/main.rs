@@ -122,8 +122,7 @@ struct Args {
     cors_origins: Option<String>,
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     tracing_subscriber::fmt::init();
 
     // Parse Args (Handles --help / --version)
@@ -131,13 +130,34 @@ async fn main() {
 
     // Check critical dependencies before starting
     if let Err(e) = check_dependencies(&args.data_dir) {
-        error!("Missing dependencies: {}", e);
-        error!("Please install the required dependencies and try again.");
+        tracing::error!("Missing dependencies: {}", e);
+        tracing::error!("Please install the required dependencies and try again.");
         std::process::exit(1);
     }
 
-    // Root requirement stripped in favor of AmbientCapabilities (ADR-022)
+    // Drop privileges to vyoma user BEFORE starting the multithreaded runtime
+    // This ensures that all subsequently created Tokio worker threads inherit the capabilities
+    if !args.keep_root {
+        match privdrop::drop_privileges() {
+            Ok(()) => tracing::info!("Privileges dropped successfully, running as user 'vyoma'"),
+            Err(e) => {
+                tracing::error!("Failed to drop privileges: {}", e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        tracing::info!("Running as root (--keep-root specified)");
+    }
 
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("Failed to build tokio runtime");
+
+    rt.block_on(async_main(args));
+}
+
+async fn async_main(args: Args) {
     info!("vyomad (Vyoma Daemon) starting up (Unix Socket: {})...", args.socket_path);
 
     #[cfg(feature = "chaos")]
@@ -462,18 +482,7 @@ async fn main() {
 
     info!("Daemon listening on Unix Socket {}", actual_socket_path);
 
-    // Drop privileges to vyoma user (unless --keep-root is specified)
-    if !args.keep_root {
-        match privdrop::drop_privileges() {
-            Ok(()) => info!("Privileges dropped successfully, running as user 'vyoma'"),
-            Err(e) => {
-                error!("Failed to drop privileges: {}", e);
-                std::process::exit(1);
-            }
-        }
-    } else {
-        info!("Running as root (--keep-root specified)");
-    }
+    // Privileges are now dropped before Tokio runtime initialization
 
     // Start HTTP server for dashboard if port is not 0
     if args.http_port > 0 {

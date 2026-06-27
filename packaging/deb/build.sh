@@ -166,11 +166,16 @@ cp packaging/systemd/vyoma-net.service "${WORK_DIR}/etc/systemd/system/"
 
 # Copy kernel and cloud-hypervisor to data directory
 mkdir -p "${WORK_DIR}/var/lib/vyoma/bin"
-KERNEL_URL="https://github.com/vyoma-systems/linux/releases/download/vyoma-v6.1.100/bzImage-x86_64"
+KERNEL_URL="https://github.com/cloud-hypervisor/linux/releases/download/ch-release-v6.16.9-20260508/bzImage-x86_64"
 KERNEL_DEST="${WORK_DIR}/var/lib/vyoma/bin/vmlinux"
 if [ ! -f "kernel.bzimage" ]; then
-    echo "Downloading Cloud Hypervisor kernel..."
-    wget -q -O kernel.bzimage "$KERNEL_URL" || curl -L -o kernel.bzimage "$KERNEL_URL"
+    if [ -f "/tmp/vyoma-bzImage" ]; then
+        echo "Using locally compiled custom kernel from /tmp/vyoma-bzImage..."
+        cp /tmp/vyoma-bzImage kernel.bzimage
+    else
+        echo "Downloading custom Vyoma kernel..."
+        wget -q -O kernel.bzimage "$KERNEL_URL" || curl -L -o kernel.bzimage "$KERNEL_URL"
+    fi
 fi
 cp kernel.bzimage "$KERNEL_DEST"
 chmod 644 "$KERNEL_DEST"

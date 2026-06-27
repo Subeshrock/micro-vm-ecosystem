@@ -119,7 +119,7 @@ fi
 
 # Copy kernel binary
 mkdir -p "${SOURCES_DIR}"
-KERNEL_URL="https://github.com/cloud-hypervisor/linux/releases/download/ch-release-v6.16.9-20260508/bzImage-x86_64"
+KERNEL_URL="https://github.com/vyoma-systems/linux/releases/download/vyoma-v6.1.100/bzImage-x86_64"
 if [ ! -f "kernel.bzimage" ]; then
     echo "Downloading Cloud Hypervisor kernel..."
     wget -q -O kernel.bzimage "$KERNEL_URL" || curl -L -o kernel.bzimage "$KERNEL_URL"

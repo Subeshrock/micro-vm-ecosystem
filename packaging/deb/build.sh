@@ -166,7 +166,7 @@ cp packaging/systemd/vyoma-net.service "${WORK_DIR}/etc/systemd/system/"
 
 # Copy kernel and cloud-hypervisor to data directory
 mkdir -p "${WORK_DIR}/var/lib/vyoma/bin"
-KERNEL_URL="https://github.com/cloud-hypervisor/linux/releases/download/ch-release-v6.16.9-20260508/bzImage-x86_64"
+KERNEL_URL="https://github.com/vyoma-systems/linux/releases/download/vyoma-v6.1.100/bzImage-x86_64"
 KERNEL_DEST="${WORK_DIR}/var/lib/vyoma/bin/vmlinux"
 if [ ! -f "kernel.bzimage" ]; then
     echo "Downloading Cloud Hypervisor kernel..."

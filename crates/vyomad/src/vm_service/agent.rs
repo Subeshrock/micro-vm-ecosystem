@@ -172,18 +172,22 @@ fn generate_init_script(config: &vyoma_core::oci::OciImageConfig, ip_address: &s
         script.push_str(&format!("export VWORKDIR={}\n", shell_escape(workdir)));
     }
 
-    script.push_str("# Mount container rootfs\n");
-    script.push_str("/bin/busybox mkdir -p /sysroot\n");
+    script.push_str("# Mount container rootfs using overlayfs\n");
+    script.push_str("/bin/busybox mkdir -p /lower\n");
     script.push_str("# Wait for /dev/vda to appear\n");
     script.push_str("while [ ! -b /dev/vda ]; do /bin/busybox sleep 0.1; done\n");
-    // Try squashfs first, then default, then fallback to tmpfs if kernel lacks support
-    script.push_str("/bin/busybox mount -r -t squashfs /dev/vda /sysroot 2>/dev/null || /bin/busybox mount -r /dev/vda /sysroot 2>/dev/null || /bin/busybox mount -t tmpfs tmpfs /sysroot\n");
+    // Mount squashfs into /lower
+    script.push_str("/bin/busybox mount -r -t squashfs /dev/vda /lower 2>/dev/null || /bin/busybox mount -r /dev/vda /lower 2>/dev/null || /bin/busybox mount -t tmpfs tmpfs /lower\n");
+
+    // Setup overlayfs
+    script.push_str("/bin/busybox mkdir -p /overlay\n");
+    script.push_str("/bin/busybox mount -t tmpfs tmpfs /overlay\n");
+    script.push_str("/bin/busybox mkdir -p /overlay/upper /overlay/work\n");
+    script.push_str("/bin/busybox mkdir -p /sysroot\n");
+    script.push_str("/bin/busybox mount -t overlay overlay -o lowerdir=/lower,upperdir=/overlay/upper,workdir=/overlay/work /sysroot\n");
 
     script.push_str("# Inject agent into container\n");
     script.push_str("/bin/busybox mkdir -p /sysroot/mnt\n");
-    // Do not mount tmpfs over /sysroot/mnt, just copy directly!
-    // (If /sysroot is read-only squashfs, this might fail unless we mount a tmpfs over /mnt)
-    script.push_str("/bin/busybox mount -t tmpfs tmpfs /sysroot/mnt 2>/dev/null || true\n");
     script.push_str("/bin/busybox cp /sbin/vyoma-agent-vm /sysroot/mnt/vyoma-agent-vm\n");
     script.push_str("/bin/busybox chmod +x /sysroot/mnt/vyoma-agent-vm\n");
 
@@ -203,12 +207,12 @@ fn generate_init_script(config: &vyoma_core::oci::OciImageConfig, ip_address: &s
     script.push_str("/bin/busybox mkdir -p /proc /sys /dev\n");
     
     // Mount essential filesystems in new root
-    script.push_str("/bin/busybox mount -t proc proc /proc 2>/dev/null || true\n");
-    script.push_str("/bin/busybox mount -t sysfs sys /sys 2>/dev/null || true\n");
-    script.push_str("/bin/busybox mount -t devtmpfs dev /dev 2>/dev/null || true\n");
+    script.push_str("/bin/busybox mount -t proc proc /proc || true\n");
+    script.push_str("/bin/busybox mount -t sysfs sys /sys || true\n");
+    script.push_str("/bin/busybox mount -t devtmpfs dev /dev || true\n");
     
     // Install busybox applets so 'echo', 'sh', etc. are available (especially if we are in tmpfs fallback)
-    script.push_str("/bin/busybox --install -s /bin 2>/dev/null || true\n");
+    script.push_str("/bin/busybox --install -s /bin || true\n");
     
     // Start agent
     script.push_str("/mnt/vyoma-agent-vm > /dev/console 2>&1 &\n");

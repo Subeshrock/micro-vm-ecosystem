@@ -248,9 +248,24 @@ enum Commands {
         #[arg(long)]
         no_verify_signature: bool,
 
+        /// Optional nonce to prevent replay attacks
+        #[arg(long)]
+        nonce: Option<String>,
+
         /// Output format: human (default) or json
         #[arg(long, default_value = "human")]
         format: String,
+    },
+    /// Show real-time stats for a VM
+    Stats {
+        /// VM ID or Name
+        id: String,
+        /// Refresh interval in seconds (default: 1)
+        #[arg(short, long, default_value = "1")]
+        interval: u64,
+        /// Run once and exit (no live updates)
+        #[arg(long)]
+        no_stream: bool,
     },
 }
 
@@ -1256,7 +1271,7 @@ async fn main() -> Result<()> {
                 }
             }
         }
-        Commands::Attest { id, manifest, trust_keys, no_verify_signature, format } => {
+        Commands::Attest { id, manifest, trust_keys, no_verify_signature, format, nonce: _ } => {
             let json_output = format == "json";
 
             match run_attest(&client, &daemon_url, &id, manifest.as_deref(), trust_keys.as_deref(), no_verify_signature, json_output).await {
@@ -1268,6 +1283,82 @@ async fn main() -> Result<()> {
                 Err(e) => {
                     error!("{}", e);
                     std::process::exit(1);
+                }
+            }
+        }
+        Commands::Stats { id, interval, no_stream } => {
+            let mut actual_id = id.clone();
+            let resp = client.get(format!("{}/ps", daemon_url)).send().await;
+            if let Ok(r) = resp {
+                if let Ok(list) = r.json::<ListResponse>().await {
+                    for vm in list.vms {
+                        if vm.id == id || vm.hostname.as_deref() == Some(id.as_str()) || vm.labels.get("vyoma.service").map(|s| s.as_str()) == Some(id.as_str()) {
+                            actual_id = vm.id;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            let url = format!("{}/vms/{}/stats", daemon_url, actual_id);
+
+            if no_stream {
+                let resp = client.get(&url).send().await;
+                if let Ok(r) = resp {
+                    if r.status().is_success() {
+                        if let Ok(stats) = r.json::<vyoma_core::api::VmStatsResponse>().await {
+                            println!("{:<15} {:<10} {:<25} {:<10}", "CONTAINER", "CPU %", "MEM USAGE / LIMIT", "MEM %");
+                            
+                            let limit_str = if stats.memory_limit_bytes > 0 {
+                                format!("{:.2}MiB", stats.memory_limit_bytes as f64 / 1048576.0)
+                            } else {
+                                "unlimited".to_string()
+                            };
+                            let usage_str = format!("{:.2}MiB", stats.memory_usage_bytes as f64 / 1048576.0);
+                            
+                            println!("{:<15} {:<9.2}% {:<25} {:<9.2}%", 
+                                &stats.vm_id[..12.min(stats.vm_id.len())],
+                                stats.cpu_percent,
+                                format!("{} / {}", usage_str, limit_str),
+                                stats.memory_percent
+                            );
+                        }
+                    } else {
+                        handle_response(Ok(r), &daemon_url).await?;
+                    }
+                } else {
+                    handle_response(resp, &daemon_url).await?;
+                }
+            } else {
+                loop {
+                    let resp = client.get(&url).send().await;
+                    if let Ok(r) = resp {
+                        if r.status().is_success() {
+                            if let Ok(stats) = r.json::<vyoma_core::api::VmStatsResponse>().await {
+                                // Clear screen and move to top
+                                print!("\x1B[2J\x1B[1;1H");
+                                println!("{:<15} {:<10} {:<25} {:<10}", "CONTAINER", "CPU %", "MEM USAGE / LIMIT", "MEM %");
+                                
+                                let limit_str = if stats.memory_limit_bytes > 0 {
+                                    format!("{:.2}MiB", stats.memory_limit_bytes as f64 / 1048576.0)
+                                } else {
+                                    "unlimited".to_string()
+                                };
+                                let usage_str = format!("{:.2}MiB", stats.memory_usage_bytes as f64 / 1048576.0);
+                                
+                                println!("{:<15} {:<9.2}% {:<25} {:<9.2}%", 
+                                    &stats.vm_id[..12.min(stats.vm_id.len())],
+                                    stats.cpu_percent,
+                                    format!("{} / {}", usage_str, limit_str),
+                                    stats.memory_percent
+                                );
+                            }
+                        } else if r.status() == reqwest::StatusCode::NOT_FOUND {
+                            error!("VM {} not found", actual_id);
+                            std::process::exit(1);
+                        }
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(interval)).await;
                 }
             }
         }

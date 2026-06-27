@@ -41,15 +41,22 @@ setup_env() {
     sudo mkdir -p /run/vyoma
     sudo chmod 0777 /run/vyoma
 
+    # Ensure vyoma user exists for TAP device creation
+    id -u vyoma &>/dev/null || sudo useradd -r -s /bin/false vyoma
+
     mkdir -p $TEST_HOME/.vyoma/bin
     if [ -f "$(pwd)/cloud-hypervisor" ]; then
          cp "$(pwd)/cloud-hypervisor" $TEST_HOME/.vyoma/bin/
+    elif [ -f "$(pwd)/bin/cloud-hypervisor" ]; then
+         cp "$(pwd)/bin/cloud-hypervisor" $TEST_HOME/.vyoma/bin/
     elif [ -f "/var/lib/vyoma/bin/cloud-hypervisor" ]; then
          cp /var/lib/vyoma/bin/cloud-hypervisor $TEST_HOME/.vyoma/bin/
     fi
 
     if [ -f "$(pwd)/kernel.bzimage" ]; then
          cp "$(pwd)/kernel.bzimage" $TEST_HOME/.vyoma/bin/vmlinux
+    elif [ -f "$(pwd)/bin/vmlinux" ]; then
+         cp "$(pwd)/bin/vmlinux" $TEST_HOME/.vyoma/bin/vmlinux
     elif [ -f "/var/lib/vyoma/bin/vmlinux" ]; then
          cp /var/lib/vyoma/bin/vmlinux $TEST_HOME/.vyoma/bin/
     fi

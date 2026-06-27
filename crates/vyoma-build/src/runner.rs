@@ -320,7 +320,7 @@ impl BuildRunner {
             "memory": { "size": 512 * 1024 * 1024, "shared": true },
             "payload": {
                 "kernel": kernel_path.to_string_lossy().to_string(),
-                "cmdline": "console=ttyS0 reboot=k panic=1 pci=off root=/dev/vda rw init=/bin/sh"
+                "cmdline": "console=ttyS0 reboot=k panic=1 root=/dev/vda rw init=/bin/sh"
             },
             "disks": [{
                 "path": rootfs_path.to_string_lossy().to_string(),
@@ -730,7 +730,7 @@ echo "Build VM: Command completed with exit code: $exit_code"
 poweroff -f
 "#, command, command);
 
-        vyoma_core::initramfs::create_initramfs(&init_script, None, &initramfs_path)
+        vyoma_core::initramfs::create_initramfs(&init_script, None, None, &initramfs_path)
             .map_err(|e| BuildError::VmError(format!("Failed to create build initramfs: {}", e)))?;
 
         info!("Created build initramfs at: {:?}", initramfs_path);

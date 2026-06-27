@@ -144,6 +144,8 @@ pub async fn run_vm(state: Arc<AppState>, request: VmRunRequest) -> Result<VmRun
         &storage.dm_device_path,
         &vm_dir,
         &prepared_image.config,
+        &network_config.ip_address,
+        &network_config.gateway,
     ).await?;
 
     let kernel_path = image::resolve_kernel_from_manifest(&prepared_image.manifest, &state.data_dir)

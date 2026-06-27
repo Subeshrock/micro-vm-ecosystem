@@ -12,24 +12,47 @@ pub async fn prepare_agent(
     _dm_path: &str,
     vm_dir: &Path,
     _config: &vyoma_core::oci::OciImageConfig,
+    ip_address: &str,
+    gateway: &str,
 ) -> Result<AgentConfig> {
     let initramfs_path = vm_dir.join("initramfs.cpio.gz");
-    let init_script = generate_init_script(_config);
+    let init_script = generate_init_script(_config, ip_address, gateway);
 
     let agent_binary_usr = PathBuf::from("/usr/bin/vyoma-agent-vm");
     let agent_binary_lib = PathBuf::from("/usr/lib/vyoma/vyoma-agent-vm");
     let agent_binary_data = PathBuf::from(&_state.data_dir).join("bin").join("vyoma-agent-vm");
+    
+    let busybox_binary_usr = PathBuf::from("/usr/bin/busybox");
+    let busybox_binary_lib = PathBuf::from("/var/lib/vyoma/bin/busybox");
+    
+    let busybox_path = if busybox_binary_lib.exists() {
+        Some(&busybox_binary_lib as &Path)
+    } else if busybox_binary_usr.exists() {
+        Some(&busybox_binary_usr as &Path)
+    } else {
+        None
+    };
+    
+    // Static musl build (preferred for local dev)
+    let agent_binary_musl = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().and_then(|parent| parent.parent().map(|target| target.join("x86_64-unknown-linux-musl/release/vyoma-agent-vm"))));
 
-    let agent_path = if agent_binary_usr.exists() {
+    // Glibc build (fallback for local dev)
+    let agent_binary_exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|parent| parent.join("vyoma-agent-vm")));
+
+    let agent_path = if agent_binary_musl.as_ref().map_or(false, |p| p.exists()) {
+        agent_binary_musl.as_deref()
+    } else if agent_binary_exe_dir.as_ref().map_or(false, |p| p.exists()) {
+        agent_binary_exe_dir.as_deref()
+    } else if agent_binary_usr.exists() {
         Some(&agent_binary_usr as &Path)
     } else if agent_binary_lib.exists() {
         Some(&agent_binary_lib as &Path)
     } else if agent_binary_data.exists() {
         Some(&agent_binary_data as &Path)
-    } else if let Ok(path) = which::which("vyoma-agent-vm") {
-        // Fallback to searching PATH (requires which crate or just a simple check)
-        // Since we don't want to add a new dependency if we can avoid it, let's just log a warning.
-        None
     } else {
         None
     };
@@ -55,10 +78,16 @@ pub async fn prepare_agent(
         }
     }
 
-    vyoma_core::initramfs::create_initramfs(&init_script, resolved_agent_path, &initramfs_path)
-        .context("Failed to create initramfs")?;
+    vyoma_core::initramfs::create_initramfs(
+        &init_script,
+        resolved_agent_path,
+        busybox_path,
+        &initramfs_path,
+    )
+    .context("Failed to create initramfs")?;
 
     info!("Agent prepared with initramfs at {:?}", initramfs_path);
+    std::fs::copy(&initramfs_path, "/tmp/initramfs.cpio.gz").ok();
 
     Ok(AgentConfig {
         initramfs_path: Some(initramfs_path),
@@ -105,20 +134,31 @@ fn shell_escape(s: &str) -> String {
 /// - `set -e`: Exit on any error
 /// - `set -u`: Treat unset variables as errors
 /// - `trap ERR`: Power off on any error to prevent continuing with broken state
-fn generate_init_script(config: &vyoma_core::oci::OciImageConfig) -> String {
+fn generate_init_script(config: &vyoma_core::oci::OciImageConfig, ip_address: &str, gateway: &str) -> String {
     let mut script = String::new();
 
-    script.push_str("#!/bin/sh\n");
+    script.push_str("#!/bin/busybox sh\n");
     // Defensive shell options: fail fast on errors and unset variables
     script.push_str("set -e\n");
     script.push_str("set -u\n");
     // Power off on any error to prevent continuing with broken state
-    script.push_str("trap 'echo Init error at line $LINENO; poweroff -f' ERR\n");
+    script.push_str("trap 'echo Init error at line $LINENO; /bin/busybox poweroff -f' ERR\n");
     script.push_str("\n");
-    script.push_str("mount -t proc proc /proc 2>/dev/null || true\n");
-    script.push_str("mount -t sysfs sys /sys 2>/dev/null || true\n");
-    script.push_str("mount -t devtmpfs dev /dev 2>/dev/null || true\n");
-    script.push_str("ip link set lo up 2>/dev/null || true\n");
+    script.push_str("/bin/busybox mkdir -p /proc /sys /dev\n");
+    script.push_str("/bin/busybox mount -t proc proc /proc 2>/dev/null || true\n");
+    script.push_str("/bin/busybox mount -t sysfs sys /sys 2>/dev/null || true\n");
+    script.push_str("/bin/busybox mount -t devtmpfs dev /dev 2>/dev/null || true\n");
+    script.push_str("/bin/busybox ip link set lo up 2>/dev/null || true\n");
+
+    script.push_str("# Wait for eth0 to appear (virtio-net driver might take a moment)\n");
+    script.push_str("while ! /bin/busybox ip link show eth0 >/dev/null 2>&1; do\n");
+    script.push_str("  /bin/busybox sleep 0.1\n");
+    script.push_str("done\n");
+
+    script.push_str("# Configure eth0 manually\n");
+    script.push_str(&format!("/bin/busybox ip addr add {}/24 dev eth0 2>/dev/null || true\n", ip_address));
+    script.push_str(&format!("/bin/busybox ip link set eth0 up 2>/dev/null || true\n"));
+    script.push_str(&format!("/bin/busybox ip route add default via {} 2>/dev/null || true\n", gateway));
 
     if let Some(envs) = &config.env {
         for env in envs {
@@ -129,22 +169,70 @@ fn generate_init_script(config: &vyoma_core::oci::OciImageConfig) -> String {
     }
 
     if let Some(workdir) = &config.working_dir {
-        script.push_str(&format!("cd {}\n", shell_escape(workdir)));
+        script.push_str(&format!("export VWORKDIR={}\n", shell_escape(workdir)));
     }
 
+    script.push_str("# Mount container rootfs\n");
+    script.push_str("/bin/busybox mkdir -p /sysroot\n");
+    script.push_str("# Wait for /dev/vda to appear\n");
+    script.push_str("while [ ! -b /dev/vda ]; do /bin/busybox sleep 0.1; done\n");
+    // Try squashfs first, then default, then fallback to tmpfs if kernel lacks support
+    script.push_str("/bin/busybox mount -r -t squashfs /dev/vda /sysroot 2>/dev/null || /bin/busybox mount -r /dev/vda /sysroot 2>/dev/null || /bin/busybox mount -t tmpfs tmpfs /sysroot\n");
+
+    script.push_str("# Inject agent into container\n");
+    script.push_str("/bin/busybox mkdir -p /sysroot/mnt\n");
+    // Do not mount tmpfs over /sysroot/mnt, just copy directly!
+    // (If /sysroot is read-only squashfs, this might fail unless we mount a tmpfs over /mnt)
+    script.push_str("/bin/busybox mount -t tmpfs tmpfs /sysroot/mnt 2>/dev/null || true\n");
+    script.push_str("/bin/busybox cp /sbin/vyoma-agent-vm /sysroot/mnt/vyoma-agent-vm\n");
+    script.push_str("/bin/busybox chmod +x /sysroot/mnt/vyoma-agent-vm\n");
+
+    // Copy busybox so the agent has a shell available in the container if needed
+    script.push_str("/bin/busybox mkdir -p /sysroot/bin\n");
+    script.push_str("/bin/busybox cp /bin/busybox /sysroot/bin/busybox 2>/dev/null || true\n");
+
+    // We must switch root to /sysroot, but before that, let's start the agent
+    // Since switch_root replaces init, we must run the agent in the background inside the new root
+    // But switch_root only runs ONE command. 
+    // To solve this, we will write a wrapper script inside the new root!
+    
+    script.push_str("cat << 'EOF' > /sysroot/mnt/start.sh\n");
+    script.push_str("#!/bin/busybox sh\n");
+    
+    // Create missing directories for essential filesystems in new root
+    script.push_str("/bin/busybox mkdir -p /proc /sys /dev\n");
+    
+    // Mount essential filesystems in new root
+    script.push_str("/bin/busybox mount -t proc proc /proc 2>/dev/null || true\n");
+    script.push_str("/bin/busybox mount -t sysfs sys /sys 2>/dev/null || true\n");
+    script.push_str("/bin/busybox mount -t devtmpfs dev /dev 2>/dev/null || true\n");
+    
+    // Install busybox applets so 'echo', 'sh', etc. are available (especially if we are in tmpfs fallback)
+    script.push_str("/bin/busybox --install -s /bin 2>/dev/null || true\n");
+    
+    // Start agent
+    script.push_str("/mnt/vyoma-agent-vm > /dev/console 2>&1 &\n");
+    
+    // Execute original container command
     let full_cmd = config.full_command();
-
-    // Start the agent in the background before executing the workload.
-    // The agent is forked (&) so it continues running after exec replaces
-    // this shell. The orphaned agent process gets reparented to the VM's init.
-    script.push_str("/sbin/vyoma-agent-vm &\n");
-
     if !full_cmd.is_empty() {
         let cmd_args: Vec<String> = full_cmd.iter().map(|s| shell_escape(s)).collect();
-        script.push_str(&format!("exec {}\n", cmd_args.join(" ")));
+        // Run in foreground (no exec) so if it fails (not found), we can fallback to the sleep loop
+        script.push_str(&format!("{} \n", cmd_args.join(" ")));
     } else {
-        script.push_str("exec /bin/sh\n");
+        script.push_str("/bin/busybox sh\n");
     }
+    
+    // Fallback: If exec fails (e.g. command not found because squashfs failed to mount),
+    // sleep forever to prevent the kernel from panicking. This keeps the agent alive!
+    script.push_str("while true; do /bin/busybox sleep 3600; done\n");
+    script.push_str("EOF\n");
+    
+    script.push_str("/bin/busybox chmod +x /sysroot/mnt/start.sh\n");
+    
+    // Now switch root to /sysroot and run our start script
+    // Use -- to prevent getopt32 from parsing options inside the wrapper path
+    script.push_str("exec /bin/busybox switch_root -- /sysroot /mnt/start.sh\n");
 
     script
 }

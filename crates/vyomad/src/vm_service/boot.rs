@@ -112,6 +112,11 @@ pub async fn start_vm(
     vmm.set_machine_config(request.vcpu, request.mem_size_mib).await
         .context("Machine config")?;
 
+    let serial_path = std::path::PathBuf::from(&ch_config.socket_path)
+        .parent().unwrap()
+        .join("serial.log");
+    vmm.enable_serial(&serial_path.to_string_lossy()).await?;
+
     vmm.start_instance().await
         .context("Start instance")?;
 

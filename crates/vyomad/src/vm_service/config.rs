@@ -26,7 +26,7 @@ pub fn build_ch_config(
     let vsock_path = vm_dir.join("vsock.sock");
 
     let boot_args = format!(
-        "console=ttyS0 reboot=k panic=1 pci=off root=/dev/vda rw ip={}::{}:255.255.255.0:{}:eth0:off:{} init=/sbin/vyoma-init",
+        "console=ttyS0 reboot=k panic=1 root=/dev/vda rw ip={}::{}:255.255.255.0:{}:eth0:off:{} init=/sbin/vyoma-init",
         network_config.ip_address,
         network_config.gateway,
         vm_id,

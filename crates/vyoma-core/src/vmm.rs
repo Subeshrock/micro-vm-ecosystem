@@ -258,6 +258,15 @@ impl VmmManager {
         Ok(())
     }
 
+    pub async fn enable_serial(&mut self, file_path: &str) -> Result<()> {
+        let serial = crate::ch_types::ConsoleConfig {
+            file: Some(file_path.to_string()),
+            mode: "File".to_string(),
+        };
+        self.config.serial = Some(serial);
+        Ok(())
+    }
+
     pub async fn set_firmware(&mut self, firmware_path: &str, secure_boot: bool, uefi_vars: Option<&str>) -> Result<()> {
         let firmware = crate::ch_types::FirmwareConfig {
             firmware_path: firmware_path.to_string(),

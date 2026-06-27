@@ -34,3 +34,5 @@ ui/dist/
 .repomixignore
 repomix.config.json
 # repomix-output.txt
+
+.env

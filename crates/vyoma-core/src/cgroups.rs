@@ -106,4 +106,30 @@ impl CgroupManager {
         }
         Ok(0)
     }
+
+    pub fn get_cpu_usage_usec(&self, vm_id: &str) -> Result<u64> {
+        let path = Path::new(&self.root_path).join(format!("vyoma-{}", vm_id)).join("cpu.stat");
+        let content = fs::read_to_string(&path)?;
+        for line in content.lines() {
+            if let Some(val) = line.strip_prefix("usage_usec ") {
+                return Ok(val.trim().parse::<u64>()?);
+            }
+        }
+        anyhow::bail!("usage_usec not found in cpu.stat")
+    }
+
+    pub fn get_memory_current(&self, vm_id: &str) -> Result<u64> {
+        let path = Path::new(&self.root_path).join(format!("vyoma-{}", vm_id)).join("memory.current");
+        Ok(fs::read_to_string(&path)?.trim().parse::<u64>()?)
+    }
+
+    pub fn get_memory_max(&self, vm_id: &str) -> Result<u64> {
+        let path = Path::new(&self.root_path).join(format!("vyoma-{}", vm_id)).join("memory.max");
+        let content = fs::read_to_string(&path)?.trim().to_string();
+        if content == "max" {
+            Ok(0) // unlimited indicator
+        } else {
+            Ok(content.parse::<u64>()?)
+        }
+    }
 }

@@ -55,7 +55,7 @@ impl VmmManager {
         &self.socket_path
     }
 
-    pub fn get_pid(&self) -> Option<u32> {
+    pub fn pid(&self) -> Option<u32> {
         self.process.as_ref().map(|p| p.id())
     }
 

@@ -37,6 +37,22 @@ setup_env() {
     sudo ip link add vyoma0 type bridge 2>/dev/null || true
     sudo ip addr add 172.16.0.1/24 dev vyoma0 2>/dev/null || true
     sudo ip link set vyoma0 up
+    
+    sudo mkdir -p /run/vyoma
+    sudo chmod 0777 /run/vyoma
+
+    mkdir -p $TEST_HOME/.vyoma/bin
+    if [ -f "$(pwd)/cloud-hypervisor" ]; then
+         cp "$(pwd)/cloud-hypervisor" $TEST_HOME/.vyoma/bin/
+    elif [ -f "/var/lib/vyoma/bin/cloud-hypervisor" ]; then
+         cp /var/lib/vyoma/bin/cloud-hypervisor $TEST_HOME/.vyoma/bin/
+    fi
+
+    if [ -f "$(pwd)/kernel.bzimage" ]; then
+         cp "$(pwd)/kernel.bzimage" $TEST_HOME/.vyoma/bin/vmlinux
+    elif [ -f "/var/lib/vyoma/bin/vmlinux" ]; then
+         cp /var/lib/vyoma/bin/vmlinux $TEST_HOME/.vyoma/bin/
+    fi
 
     mkdir -p $TEST_HOME/.vyoma/cni/bin
     if [ -d "$REAL_HOME/.vyoma/cni/bin" ] && [ "$(ls -A $REAL_HOME/.vyoma/cni/bin)" ]; then
@@ -173,6 +189,7 @@ vyoma_run_and_get_id() {
 
     local vm_id=$(echo "$output" | awk -F 'VM ID: ' '{print $2}' | awk '{print $1}' | tr -d ',')
     if [ -z "$vm_id" ]; then
+        echo "vyoma run failed! Output: $output" >&2
         vm_id=$($VYOMA_BIN --socket-path /run/vyoma/test.sock ps 2>/dev/null | grep -E "$extra_args" | head -1 | awk '{print $1}')
     fi
 

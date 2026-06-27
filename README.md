@@ -81,6 +81,7 @@ For a complete reference of all 20+ commands, see [COMMANDS.md](COMMANDS.md).
     vyoma run ubuntu:latest --vcpu 2 --memory 1024 -p 8080:80
     ```
 *   **List VMs**: `vyoma ps`
+*   **VM Stats**: `vyoma stats <vm_id>` (View real-time CPU and Memory usage)
 *   **Logs**: `vyoma logs -f <vm_id>`
 *   **Shell Access**: `vyoma exec <vm_id> /bin/bash` (Uses a secure, agent-based HTTP channel—no SSH required)
 *   **Stop/Remove**: `vyoma stop <vm_id>`, `vyoma rm <vm_id>`

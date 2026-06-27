@@ -16,7 +16,7 @@ export REAL_HOME=$HOME
 RUNNING_VMS=()
 
 if [ ! -f "$VYOMAD_BIN" ]; then
-    echo "Error: Binary not found at $VYOMAD_BIN. Run 'cargo build --release' first."
+    echo "Error: Binary not found at $VYOMAD_BIN. Run 'make all' first."
     exit 1
 fi
 
@@ -30,7 +30,13 @@ check_root() {
 setup_env() {
     export TEST_HOME=$(mktemp -d)
     export HOME=$TEST_HOME
+    export PATH="$(pwd)/target/release:$PATH"
     echo "Test Environment: $TEST_HOME"
+
+    # Ensure vyoma0 bridge exists for networking
+    sudo ip link add vyoma0 type bridge 2>/dev/null || true
+    sudo ip addr add 172.16.0.1/24 dev vyoma0 2>/dev/null || true
+    sudo ip link set vyoma0 up
 
     mkdir -p $TEST_HOME/.vyoma/cni/bin
     if [ -d "$REAL_HOME/.vyoma/cni/bin" ] && [ "$(ls -A $REAL_HOME/.vyoma/cni/bin)" ]; then
@@ -46,6 +52,7 @@ setup_env() {
         echo -e "${RED}CNI Plugins not found. Downloading...${NC}"
         curl -sL https://github.com/containernetworking/plugins/releases/download/v1.3.0/cni-plugins-linux-amd64-v1.3.0.tgz | tar -xz -C $TEST_HOME/.vyoma/cni/bin
     fi
+    chmod -R 777 $TEST_HOME
 }
 
 cleanup_resources() {
@@ -70,6 +77,14 @@ cleanup_resources() {
 
 cleanup_env() {
     local pid=$1
+    echo "Dumping serial logs from $TEST_HOME in cleanup_env:"
+    for f in $TEST_HOME/.vyoma/vms/*/serial.log; do
+        if [ -f "$f" ]; then
+            echo "--- $f ---"
+            cat "$f"
+        fi
+    done
+
     if [ -n "$pid" ]; then
         kill $pid 2>/dev/null || true
         wait $pid 2>/dev/null || true
@@ -77,15 +92,22 @@ cleanup_env() {
     pkill -P $$ vyomad 2>/dev/null || true
     sudo dmsetup remove_all 2>/dev/null || true
     losetup -D 2>/dev/null || true
-    rm -rf $TEST_HOME 2>/dev/null || true
+    # rm -rf $TEST_HOME 2>/dev/null || true
 }
 
-trap cleanup_resources EXIT
+# trap cleanup_resources EXIT
 
 handle_error() {
     echo -e "${RED}Test Error - Cleaning up...${NC}"
+    echo "Dumping serial logs from $TEST_HOME:"
+    for f in $TEST_HOME/.vyoma/vms/*/serial.log; do
+        if [ -f "$f" ]; then
+            echo "--- $f ---"
+            cat "$f"
+        fi
+    done
     pkill vyomad 2>/dev/null || true
-    rm -rf /tmp/vyoma-tests-* 2>/dev/null || true
+    # rm -rf /tmp/vyoma-tests-* 2>/dev/null || true
 }
 
 assert_success() {

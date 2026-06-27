@@ -1,7 +1,8 @@
 # Changelog
 
 ## [0.6.0] - Upcoming (The Polish Update)
-- **Lifecycle**: `vyoma restart` (Stop/Run replacement), `vyoma exec` (Agent-based HTTP channel instead of SSH).
+- **Lifecycle**: `vyoma restart` (Stop/Run replacement), `vyoma exec` (Agent-based HTTP channel replacing SSH, using statically compiled musl agent).
+- **Kernel Upgrade**: Replaced the bundled VM kernel with a custom-built Linux v6.1.100 kernel featuring `CONFIG_SQUASHFS=y` and `CONFIG_OVERLAY_FS=y` to ensure container root filesystems are correctly mounted with a writable overlay layer.
 - **Logging**: `vyoma logs <service>` support.
 - **Inspect**: API for inspecting VM details.
 

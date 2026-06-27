@@ -198,15 +198,35 @@ pub async fn exec_in_vm(
     let target_ip = vm_ip.split('/').next().unwrap_or(&vm_ip).to_string();
 
     let target_addr = format!("{}:9999", target_ip);
-    let mut stream = match tokio::time::timeout(
-        std::time::Duration::from_secs(5),
-        tokio::net::TcpStream::connect(&target_addr),
-    )
-    .await
-    {
-        Ok(Ok(s)) => s,
-        Ok(Err(e)) => return Err((StatusCode::SERVICE_UNAVAILABLE, format!("Connection failed: {}", e))),
-        Err(_) => return Err((StatusCode::GATEWAY_TIMEOUT, "Connection timeout to agent".to_string())),
+    let mut last_error = String::new();
+    let mut stream_opt = None;
+
+    for attempt in 0..10 {
+        if attempt > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            tokio::net::TcpStream::connect(&target_addr),
+        )
+        .await
+        {
+            Ok(Ok(s)) => {
+                stream_opt = Some(s);
+                break;
+            }
+            Ok(Err(e)) => {
+                last_error = e.to_string();
+            }
+            Err(_) => {
+                last_error = "Connection timeout to agent".to_string();
+            }
+        };
+    }
+
+    let mut stream = match stream_opt {
+        Some(s) => s,
+        None => return Err((StatusCode::SERVICE_UNAVAILABLE, format!("Connection failed after retries: {}", last_error))),
     };
 
     let req = AgentRequest::ExecCommand {

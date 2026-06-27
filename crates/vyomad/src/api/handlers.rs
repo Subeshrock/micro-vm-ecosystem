@@ -524,6 +524,7 @@ pub async fn restore_vm(
         vtpm_manager: None,
         attestation_status: None,
         attestation_task: None,
+        last_cpu_sample: None,
     };
 
     {
@@ -1309,6 +1310,7 @@ pub async fn adopt_teleported_vm(
         mem_size_mib: 512,
         vtpm_manager: None,
         attestation_task: None,
+        last_cpu_sample: None,
     }));
 
     {
@@ -1801,4 +1803,53 @@ pub async fn get_policy_handler(
     }).collect();
 
     Ok(Json(responses))
+}
+
+pub async fn get_vm_stats(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<vyoma_core::api::VmStatsResponse>, (StatusCode, String)> {
+    let vm_arc = {
+        let vms = state.vms.lock().await;
+        vms.get(&id).cloned()
+    };
+    if vm_arc.is_none() {
+        return Err((StatusCode::NOT_FOUND, "VM not found".into()));
+    }
+
+    let vm_mutex = vm_arc.unwrap();
+    let mut vm = vm_mutex.lock().await;
+
+    let usage_usec = state.cgroups.get_cpu_usage_usec(&vm.id).unwrap_or(0);
+    let now = std::time::Instant::now();
+    
+    let cpu_percent = if let Some((prev_usage, prev_instant)) = vm.last_cpu_sample {
+        let delta_usec = usage_usec.saturating_sub(prev_usage);
+        let delta_time = now.duration_since(prev_instant).as_micros() as u64;
+        if delta_time > 0 {
+            let num_cpus = vm.vcpu as f64;
+            (delta_usec as f64 / delta_time as f64) * 100.0 * num_cpus
+        } else {
+            0.0
+        }
+    } else {
+        0.0 // first sample
+    };
+    vm.last_cpu_sample = Some((usage_usec, now));
+
+    let mem_current = state.cgroups.get_memory_current(&vm.id).unwrap_or(0);
+    let mem_max = state.cgroups.get_memory_max(&vm.id).unwrap_or(0);
+    let mem_percent = if mem_max > 0 {
+        (mem_current as f64 / mem_max as f64) * 100.0
+    } else {
+        0.0
+    };
+
+    Ok(Json(vyoma_core::api::VmStatsResponse {
+        vm_id: id,
+        cpu_percent,
+        memory_usage_bytes: mem_current,
+        memory_limit_bytes: mem_max,
+        memory_percent: mem_percent,
+    }))
 }

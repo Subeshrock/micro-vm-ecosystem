@@ -314,6 +314,7 @@ async fn async_main(args: Args) {
                 vcpu: rvm.state.vcpu,
                 mem_size_mib: rvm.state.mem_size_mib,
                 attestation_task: None,
+                last_cpu_sample: None,
             };
             
             let mut vms = state.vms.lock().await;
@@ -365,6 +366,7 @@ async fn async_main(args: Args) {
         .route("/adopt-teleported-vm", post(handlers::adopt_teleported_vm))
         .route("/policy", get(handlers::get_policy_handler).post(handlers::set_policy_handler))
         .route("/attest/:id", post(handlers::attest_vm_handler))
+        .route("/vms/:id/stats", get(handlers::get_vm_stats))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), auth::auth_middleware));
 
     // Health check and UI are public (no auth required)

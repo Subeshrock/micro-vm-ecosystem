@@ -123,6 +123,7 @@ pub struct VmInstance {
     pub mem_size_mib: u32,
 
     pub attestation_task: Option<tokio::task::JoinHandle<()>>,
+    pub last_cpu_sample: Option<(u64, std::time::Instant)>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

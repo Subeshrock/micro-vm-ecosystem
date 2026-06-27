@@ -162,13 +162,25 @@ pub async fn run_vm(state: Arc<AppState>, request: VmRunRequest) -> Result<VmRun
         &kernel_path,
     );
 
+    let cgroup_path = setup_cgroups(&state, &vm_id, request.vcpu, request.mem_size_mib)?;
+
     let (vmm, proxy_tasks, fs_managers, mut vtpm_manager) = match boot::start_vm(
         &state,
         &ch_config,
         &network_config,
         &request,
     ).await {
-        Ok(result) => result,
+        Ok(result) => {
+            // Add cloud-hypervisor process to cgroup
+            if let Some(pid) = result.0.pid() {
+                if let Err(e) = state.cgroups.add_process(&vm_id, pid) {
+                     error!("Failed to add process {} to cgroup: {}", pid, e);
+                } else {
+                     info!("Added process {} to cgroup for VM {}", pid, vm_id);
+                }
+            }
+            result
+        },
         Err(e) => {
             ctx.cleanup_on_failure().await;
             return Err(e);
@@ -239,7 +251,7 @@ pub async fn run_vm(state: Arc<AppState>, request: VmRunRequest) -> Result<VmRun
         proxy_tasks,
         fs_managers,
         vtpm_manager,
-        cgroup_path: setup_cgroups(&state, &vm_id, request.vcpu, request.mem_size_mib)?,
+        cgroup_path,
         netns_path: network_config.netns_path.clone(),
         config_ports: request.ports.clone(),
         config_volumes: request.volumes.clone(),
@@ -250,6 +262,7 @@ pub async fn run_vm(state: Arc<AppState>, request: VmRunRequest) -> Result<VmRun
         mem_size_mib: request.mem_size_mib,
         networks: request.networks.clone(),
         attestation_task: attestation_handle,
+        last_cpu_sample: None,
     };
 
     instance.save_state().context("Failed to save state")?;

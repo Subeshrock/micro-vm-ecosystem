@@ -233,7 +233,35 @@ impl VmService for GrpcVmService {
         &self,
         request: Request<LogRequest>,
     ) -> Result<Response<Self::StreamLogsStream>, Status> {
-        Err(Status::unimplemented("Not implemented"))
+        use tokio_stream::wrappers::BroadcastStream;
+        use tokio_stream::StreamExt;
+        
+        let req = request.into_inner();
+        let vm_id = req.vm_id;
+
+        let vm_arc = {
+            let vms = self.state.vms.lock().await;
+            vms.get(&vm_id).cloned()
+        };
+        
+        let vm_arc = vm_arc.ok_or_else(|| Status::not_found("VM not found"))?;
+
+        let rx = {
+            let vm = vm_arc.lock().await;
+            vm.vmm.subscribe_logs()
+        };
+
+        let stream = BroadcastStream::new(rx).filter_map(|result| {
+            match result {
+                Ok(msg) => Some(Ok(LogLine {
+                    line: msg,
+                    timestamp: chrono::Utc::now().timestamp(),
+                })),
+                Err(_) => None,
+            }
+        });
+
+        Ok(Response::new(Box::pin(stream) as Self::StreamLogsStream))
     }
 
     async fn create_snapshot(

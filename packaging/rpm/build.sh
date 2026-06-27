@@ -56,12 +56,14 @@ mkdir -p "${WORK_DIR}"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 mkdir -p "${SOURCES_DIR}"
 
 # 1. Build Binaries
-"$CARGO" build --release --bin vyomad --bin vyoma --bin vyoma-agent-vm
+"$CARGO" build --release --bin vyomad --bin vyoma
+rustup target add x86_64-unknown-linux-musl
+"$CARGO" build --release --target x86_64-unknown-linux-musl --bin vyoma-agent-vm
 
 # 2. Copy binaries to source dir
 cp target/release/vyomad "${SOURCES_DIR}/"
 cp target/release/vyoma "${SOURCES_DIR}/"
-cp target/release/vyoma-agent-vm "${SOURCES_DIR}/"
+cp target/x86_64-unknown-linux-musl/release/vyoma-agent-vm "${SOURCES_DIR}/vyoma-agent-vm"
 
 # 3. Fetch Dependencies with checksum verification
 echo "Fetching dependencies..."

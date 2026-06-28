@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use tracing::info;
+use tracing::{info, debug, warn, error};
 
 // Add devicemapper imports
 use devicemapper::{DM, DmName, DmOptions, DmUuid, DevId};
@@ -32,7 +32,30 @@ pub struct DmManager {
 impl DmManager {
     pub fn new() -> Result<Self> {
         info!("Initializing Device Mapper manager");
-        let dm = DM::new().map_err(|e| StorageError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        
+        let groups = unsafe {
+            let mut g = vec![0; 32];
+            let n = libc::getgroups(32, g.as_mut_ptr());
+            if n >= 0 {
+                g.truncate(n as usize);
+                format!("{:?}", g)
+            } else {
+                "failed to get groups".to_string()
+            }
+        };
+        info!("Current process groups: {}", groups);
+        
+        if let Ok(meta) = std::fs::metadata("/dev/mapper/control") {
+            use std::os::unix::fs::PermissionsExt;
+            info!("/dev/mapper/control exists, mode: {:o}", meta.permissions().mode());
+        } else {
+            info!("/dev/mapper/control DOES NOT EXIST!");
+        }
+
+        let dm = DM::new().map_err(|e| {
+            error!("DM::new() failed with: {}", e);
+            StorageError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
+        })?;
         Ok(Self { dm })
     }
     

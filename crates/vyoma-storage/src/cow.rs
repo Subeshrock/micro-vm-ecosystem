@@ -2,7 +2,7 @@ use std::fs::File;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
-use tracing::{info, warn};
+use tracing::{info, warn, error};
 use loopdev::LoopControl;
 
 use crate::error::{StorageError, Result};
@@ -35,29 +35,71 @@ impl LoopManager {
     }
     
     pub fn attach(&self, file: &Path) -> Result<LoopDevice> {
-        info!("Attaching loop device to {:?}", file);
+        self.attach_internal(file, false)
+    }
+
+    pub fn attach_readonly(&self, file: &Path) -> Result<LoopDevice> {
+        self.attach_internal(file, true)
+    }
+
+    fn attach_internal(&self, file: &Path, readonly: bool) -> Result<LoopDevice> {
+        info!("Attaching loop device to {:?} (readonly: {})", file, readonly);
         
         if !file.exists() {
             return Err(StorageError::NotFound(format!("File not found: {:?}", file)));
         }
-        
-        let ld = self.control.next_free().map_err(|e| StorageError::Io(e))?;
-        
-        // Ensure read/write with retry for udev race condition
-        let mut retries = 0;
-        loop {
-            match ld.with().read_only(false).attach(file) {
-                Ok(_) => break,
-                Err(e) if e.raw_os_error() == Some(13) && retries < 50 => {
-                    std::thread::sleep(std::time::Duration::from_millis(20));
-                    retries += 1;
-                }
-                Err(e) => return Err(StorageError::Io(e)),
-            }
+
+        match std::fs::OpenOptions::new().read(true).write(!readonly).open(file) {
+            Ok(_) => info!("Successfully opened backing file {:?}", file),
+            Err(e) => error!("Failed to open backing file {:?} with write={}: {:?}", file, !readonly, e),
         }
         
-        let loop_path = ld.path().unwrap_or_else(|| PathBuf::from(""));
-        Ok(LoopDevice::new(loop_path, Some(ld)))
+        let mut retries = 0;
+        let _ld = loop {
+            match self.control.next_free() {
+                Ok(ld) => {
+                    let attach_result = ld.with().read_only(readonly).attach(file);
+                    match attach_result {
+                        Ok(()) => return Ok(LoopDevice::new(ld.path().unwrap(), Some(ld))),
+                        Err(e) if e.raw_os_error() == Some(13) => {
+                            warn!("loopdev attach failed with EACCES, falling back to losetup...");
+                            let mut cmd = std::process::Command::new("losetup");
+                            cmd.arg("-f").arg("--show");
+                            if readonly {
+                                cmd.arg("-r");
+                            }
+                            cmd.arg(file);
+                            match cmd.output() {
+                                Ok(output) if output.status.success() => {
+                                    let stdout = String::from_utf8_lossy(&output.stdout);
+                                    let dev_path = stdout.trim();
+                                    info!("losetup fallback succeeded: {}", dev_path);
+                                    return Ok(LoopDevice::new(std::path::PathBuf::from(dev_path), None));
+                                }
+                                Ok(output) => {
+                                    error!("losetup fallback failed: {}", String::from_utf8_lossy(&output.stderr));
+                                    if retries < 50 {
+                                        std::thread::sleep(std::time::Duration::from_millis(20));
+                                        retries += 1;
+                                        continue;
+                                    }
+                                    return Err(StorageError::Io(e));
+                                }
+                                Err(err) => {
+                                    error!("Failed to execute losetup: {}", err);
+                                    return Err(StorageError::Io(e));
+                                }
+                            }
+                        }
+                        Err(e) => return Err(StorageError::Io(e)),
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to get next free loop device: {:?}", e);
+                    return Err(StorageError::Io(e));
+                }
+            }
+        };
     }
     
     pub fn detach(&self, device: &LoopDevice) -> Result<()> {

@@ -78,8 +78,9 @@ For a complete reference of all 20+ commands, see [COMMANDS.md](COMMANDS.md).
 ### Lifecycle
 *   **Run a VM**:
     ```bash
-    vyoma run ubuntu:latest --vcpu 2 --memory 1024 -p 8080:80
+    vyoma run ubuntu:latest --vcpu 2 --memory 1024 -p 8080:80 -v /host/path:/vm/path
     ```
+    > **Note for Volume Mounts**: The host directory must be readable (and writable, if needed) by the `vyoma` user, as the daemon runs under this unprivileged user. You can use `chown vyoma:vyoma /host/path` or `chmod o+r /host/path` to grant access.
 *   **List VMs**: `vyoma ps`
 *   **VM Stats**: `vyoma stats <vm_id>` (View real-time CPU and Memory usage)
 *   **Logs**: `vyoma logs -f <vm_id>`
@@ -184,10 +185,7 @@ Vyoma is designed to be "Batteries Included", but some advanced features need he
 *   **Systemd**: Manages the `vyomad` daemon lifecycle.
 
 **Optional Dependencies (Install Manually):**
-*   **Virtiofsd**: REQUIRED for Volume Mounts (`-v`).
-    *   **Ubuntu/Debian**: `sudo apt install virtiofsd`
-    *   **Fedora**: `sudo dnf install virtiofsd`
-    *   **Manual**: Download binary from [GitLab](https://gitlab.com/virtio-fs/virtiofsd/-/releases) and place in `$PATH` or `/usr/bin`.
+*   **Virtiofsd**: REQUIRED for Volume Mounts (`-v`). This is now automatically bundled and installed with Vyoma packages (Debian/RPM). If you are building from source, you will need to install it manually and ensure it is available at `/usr/lib/vyoma/virtiofsd` or in your `$PATH`.
 
 **Privilege Model:**
 *   **Daemon (`vyomad`)**: Runs as **`vyoma` user** with kernel capabilities (`CAP_NET_ADMIN`, `CAP_SYS_ADMIN`, `CAP_NET_RAW`, `CAP_SETUID`, `CAP_SETGID`).

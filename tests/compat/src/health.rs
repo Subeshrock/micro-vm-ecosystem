@@ -45,14 +45,15 @@ impl Healthchecker {
         }
     }
 
-    async fn check_with_retry<F, R>(&self, mut check_fn: F) -> Result<HealthResult>
+    async fn check_with_retry<F, Fut>(&self, mut check_fn: F) -> Result<HealthResult>
     where
-        F: FnMut() -> Result<HealthResult>,
+        F: FnMut() -> Fut,
+        Fut: std::future::Future<Output = Result<HealthResult>>,
     {
         let mut last_result: Option<HealthResult> = None;
 
         for attempt in 1..=self.retries {
-            match check_fn() {
+            match check_fn().await {
                 Ok(result) if result.healthy || result.skipped => {
                     return Ok(result);
                 }

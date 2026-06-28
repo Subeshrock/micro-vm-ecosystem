@@ -8,7 +8,7 @@ setup_env
 
 # Start Daemon
 echo "Starting Daemon..."
-sudo -E $VYOMAD_BIN --socket-path /run/vyoma/test.sock --http-port 3008 > $TEST_HOME/daemon.log 2>&1 &
+sudo -E $VYOMAD_BIN --data-dir $TEST_HOME/.vyoma --socket-path /run/vyoma/test.sock --http-port 3008 > $TEST_HOME/daemon.log 2>&1 &
 DAEMON_PID=$!
 sleep 3
 VYOMA="$VYOMA_BIN --socket-path /run/vyoma/test.sock --http-port 3008"

@@ -9,7 +9,7 @@ setup_env
 
 # Start Daemon
 echo "Starting Daemon (3004)..."
-sudo -E $VYOMAD_BIN --socket-path /run/vyoma/test.sock --http-port 3004 > $TEST_HOME/daemon.log 2>&1 &
+sudo -E $VYOMAD_BIN --data-dir $TEST_HOME/.vyoma --socket-path /run/vyoma/test.sock --http-port 3004 > $TEST_HOME/daemon.log 2>&1 &
 DAEMON_PID=$!
 sleep 3
 
@@ -82,5 +82,5 @@ else
     echo -e "${GREEN}Pass: Services Removed${NC}"
 fi
 
-cleanup_env $DAEMON_PID
+# cleanup_env $DAEMON_PID
 echo "=== Test 04 Passed ==="

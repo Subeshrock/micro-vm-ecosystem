@@ -8,7 +8,7 @@ check_root
 setup_env
 
 echo "Starting Daemon (3009)..."
-sudo -E $VYOMAD_BIN --socket-path /run/vyoma/test.sock --http-port 3009 > $TEST_HOME/daemon.log 2>&1 &
+sudo -E $VYOMAD_BIN --data-dir $TEST_HOME/.vyoma --socket-path /run/vyoma/test.sock --http-port 3009 > $TEST_HOME/daemon.log 2>&1 &
 DAEMON_PID=$!
 sleep 3
 

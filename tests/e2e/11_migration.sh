@@ -11,12 +11,12 @@ SOURCE_PORT=3012
 TARGET_PORT=3013
 
 echo "Starting source daemon (port $SOURCE_PORT)..."
-sudo -E $VYOMAD_BIN --socket-path /run/vyoma/source.sock --http-port $SOURCE_PORT > $TEST_HOME/source-daemon.log 2>&1 &
+sudo -E $VYOMAD_BIN --data-dir $TEST_HOME/.vyoma --socket-path /run/vyoma/source.sock --http-port $SOURCE_PORT > $TEST_HOME/source-daemon.log 2>&1 &
 SOURCE_PID=$!
 sleep 3
 
 echo "Starting target daemon (port $TARGET_PORT)..."
-sudo -E $VYOMAD_BIN --socket-path /run/vyoma/target.sock --http-port $TARGET_PORT > $TEST_HOME/target-daemon.log 2>&1 &
+sudo -E $VYOMAD_BIN --data-dir $TEST_HOME/.vyoma --socket-path /run/vyoma/target.sock --http-port $TARGET_PORT > $TEST_HOME/target-daemon.log 2>&1 &
 TARGET_PID=$!
 sleep 3
 

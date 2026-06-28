@@ -9,7 +9,7 @@ setup_env
 
 # Start Daemon
 echo "Starting Daemon..."
-sudo -E $VYOMAD_BIN --socket-path /run/vyoma/test.sock --http-port 3001 > $TEST_HOME/daemon.log 2>&1 &
+sudo -E $VYOMAD_BIN --data-dir $TEST_HOME/.vyoma --socket-path /run/vyoma/test.sock --http-port 3001 > $TEST_HOME/daemon.log 2>&1 &
 DAEMON_PID=$!
 sleep 3
 
@@ -51,10 +51,11 @@ sleep 4
 # 3. PS
 echo "Listing VMs..."
 $VYOMA ps
-if $VYOMA ps | grep -q "test-vm"; then
-    echo -e "${GREEN}Pass: VM found in PS${NC}"
+if [ -n "$VM_ID" ] && $VYOMA ps | grep -q "$VM_ID"; then
+    echo -e "${GREEN}Pass: VM Running${NC}"
 else
     echo -e "${RED}Fail: VM not found${NC}"
+    cat $TEST_HOME/daemon.log
     exit 1
 fi
 

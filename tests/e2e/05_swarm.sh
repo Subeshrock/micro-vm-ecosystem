@@ -8,15 +8,17 @@ check_root
 
 # Setup Node 1
 echo "Setting up Node 1..."
-export TEST_HOME=$(mktemp -d) # HOME 1
-HOME1=$TEST_HOME
-sudo -E HOME=$HOME1 $VYOMAD_BIN --socket-path /run/vyoma/node1.sock --http-port 3005 > $HOME1/daemon.log 2>&1 &
+export TEST_HOME=$(mktemp -d)
+HOME1=$TEST_HOME/node1
+mkdir -p $HOME1
+sudo -E HOME=$HOME1 $VYOMAD_BIN --data-dir $HOME1/.vyoma --socket-path /run/vyoma/node1.sock --http-port 3005 > $HOME1/daemon.log 2>&1 &
 PID1=$!
 
 # Setup Node 2
 echo "Setting up Node 2..."
-HOME2=$(mktemp -d)
-sudo -E HOME=$HOME2 VYOMA_DAEMON_PORT=3006 $VYOMAD_BIN --socket-path /run/vyoma/node2.sock --http-port 3006 > $HOME2/daemon.log 2>&1 &
+HOME2=$TEST_HOME/node2
+mkdir -p $HOME2
+sudo -E HOME=$HOME2 VYOMA_DAEMON_PORT=3006 $VYOMAD_BIN --data-dir $HOME2/.vyoma --socket-path /run/vyoma/node2.sock --http-port 3006 > $HOME2/daemon.log 2>&1 &
 PID2=$!
 
 sleep 3

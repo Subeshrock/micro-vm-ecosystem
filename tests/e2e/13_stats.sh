@@ -12,7 +12,7 @@ setup_env
 export RUST_LOG=info
 
 echo "Starting Daemon..."
-sudo -E $VYOMAD_BIN --keep-root --data-dir $TEST_HOME/.vyoma --socket-path /run/vyoma/test.sock --http-port 3002 > $TEST_HOME/daemon.log 2>&1 &
+sudo -E $VYOMAD_BIN --data-dir $TEST_HOME/.vyoma --keep-root --socket-path /run/vyoma/test.sock --http-port 3002 > $TEST_HOME/daemon.log 2>&1 &
 DAEMON_PID=$!
 sleep 3
 
@@ -29,7 +29,7 @@ echo "Running VM..."
 VM_ID=$(vyoma_run_and_get_id docker.io/library/nginx:alpine --hostname stats-vm --memory 128)
 
 echo "Starting busy loop inside the VM via exec..."
-$VYOMA exec $VM_ID /bin/sh -c "while true; do echo busy > /dev/null; done" &
+$VYOMA exec $VM_ID -- sh -c "while true; do true; done" &
 EXEC_PID=$!
 
 sleep 5

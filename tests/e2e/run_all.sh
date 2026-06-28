@@ -55,5 +55,6 @@ run_test ./tests/e2e/11_attestation.sh
 run_test ./tests/e2e/11_migration.sh
 run_test ./tests/e2e/12_exec.sh
 run_test ./tests/e2e/13_stats.sh
+run_test ./tests/e2e/14_volumes.sh
 
 echo "Suite Completed."

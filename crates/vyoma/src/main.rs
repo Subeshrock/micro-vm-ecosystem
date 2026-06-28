@@ -53,7 +53,7 @@ struct Cli {
     socket_path: String,
 
     /// HTTP port of daemon (for HTTP requests through Unix Socket)
-    #[arg(short = 'p', long, global = true, default_value_t = 8080)]
+    #[arg(long, global = true, default_value_t = 8080)]
     http_port: u16,
 
     #[command(subcommand)]

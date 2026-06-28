@@ -20,16 +20,11 @@ impl VirtioFsManager {
     }
 
     pub fn start(&mut self, source_path: &str) -> Result<()> {
-        info!("Starting virtiofsd for tag {} on socket {}", self.tag, self.socket_path);
-        
-        // Ensure socket doesn't exist
-        if Path::new(&self.socket_path).exists() {
-            std::fs::remove_file(&self.socket_path)?;
-        }
-
         // Try to find virtiofsd in priority order (ADR 021)
         let binary = if Path::new("/opt/vyoma/bin/virtiofsd").exists() {
             "/opt/vyoma/bin/virtiofsd"
+        } else if Path::new("/usr/lib/vyoma/virtiofsd").exists() {
+            "/usr/lib/vyoma/virtiofsd"
         } else if Path::new("/usr/libexec/vyoma/virtiofsd").exists() {
             "/usr/libexec/vyoma/virtiofsd"
         } else if Path::new("bin/virtiofsd").exists() {
@@ -37,6 +32,13 @@ impl VirtioFsManager {
         } else {
             "virtiofsd"
         };
+        info!("Starting virtiofsd for tag {} on socket {} using binary: {}", self.tag, self.socket_path, binary);
+
+        // Ensure socket doesn't exist
+        if Path::new(&self.socket_path).exists() {
+            std::fs::remove_file(&self.socket_path)?;
+        }
+
         let child = Command::new(binary)
             .arg(format!("--socket-path={}", self.socket_path))
             .arg(format!("--shared-dir={}", source_path))

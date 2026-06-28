@@ -116,6 +116,7 @@ impl VmmManager {
             let reader = BufReader::new(stdout);
             for line in reader.lines() {
                 if let Ok(l) = line {
+                    tracing::info!("[CH STDOUT] {}", l);
                     let _ = tx_out.send(format!("[STDOUT] {}", l));
                 }
             }
@@ -125,6 +126,7 @@ impl VmmManager {
             let reader = BufReader::new(stderr);
             for line in reader.lines() {
                 if let Ok(l) = line {
+                    tracing::error!("[CH STDERR] {}", l);
                     let _ = tx_err.send(format!("[STDERR] {}", l));
                 }
             }

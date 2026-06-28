@@ -278,7 +278,7 @@ pub async fn run_vm(
         vm_id: r.vm_id,
         status: r.status,
         ip_address: r.ip_address,
-    })).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+    })).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("{:#}", e)))
 }
 
 pub async fn stop_vm(

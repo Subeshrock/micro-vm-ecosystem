@@ -53,7 +53,7 @@ async fn prepare_privileged_storage(
     let dm_mgr = DmManager::new().context("Failed to create DmManager")?;
 
     info!("Attaching squashfs rootfs to loop device: {:?}", rootfs_sqfs_path);
-    let base_loop = loop_mgr.attach(rootfs_sqfs_path)
+    let base_loop = loop_mgr.attach_readonly(rootfs_sqfs_path)
         .context("Failed to attach squashfs loop device")?;
 
     info!("Attaching COW file to loop device");

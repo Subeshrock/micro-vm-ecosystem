@@ -140,6 +140,9 @@ pub trait AgentProvider: Send + Sync {
         _dm_path: &str,
         _vm_dir: &PathBuf,
         _config: &vyoma_core::oci::OciImageConfig,
+        _ip_address: &str,
+        _gateway: &str,
+        _volumes: &[vyoma_core::api::VolumeMount],
     ) -> anyhow::Result<AgentConfig>;
 }
 
@@ -161,6 +164,9 @@ impl AgentProvider for MockAgentProvider {
         _dm_path: &str,
         _vm_dir: &PathBuf,
         _config: &vyoma_core::oci::OciImageConfig,
+        _ip_address: &str,
+        _gateway: &str,
+        _volumes: &[vyoma_core::api::VolumeMount],
     ) -> anyhow::Result<AgentConfig> {
         Ok(self.agent_config.clone())
     }

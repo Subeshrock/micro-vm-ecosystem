@@ -71,7 +71,7 @@ impl VmCreationContext {
         if let Some(ref vm_dir) = self.vm_dir {
             if vm_dir.exists() {
                 info!("Cleaning up VM directory {:?}", vm_dir);
-                let _ = std::fs::remove_dir_all(vm_dir);
+                // let _ = std::fs::remove_dir_all(vm_dir);
             }
         }
 
@@ -146,6 +146,7 @@ pub async fn run_vm(state: Arc<AppState>, request: VmRunRequest) -> Result<VmRun
         &prepared_image.config,
         &network_config.ip_address,
         &network_config.gateway,
+        &request.volumes,
     ).await?;
 
     let kernel_path = image::resolve_kernel_from_manifest(&prepared_image.manifest, &state.data_dir)

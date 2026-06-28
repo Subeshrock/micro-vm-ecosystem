@@ -14,9 +14,10 @@ pub async fn prepare_agent(
     _config: &vyoma_core::oci::OciImageConfig,
     ip_address: &str,
     gateway: &str,
+    volumes: &[vyoma_core::api::VolumeMount],
 ) -> Result<AgentConfig> {
     let initramfs_path = vm_dir.join("initramfs.cpio.gz");
-    let init_script = generate_init_script(_config, ip_address, gateway);
+    let init_script = generate_init_script(_config, ip_address, gateway, volumes);
 
     let agent_binary_usr = PathBuf::from("/usr/bin/vyoma-agent-vm");
     let agent_binary_lib = PathBuf::from("/usr/lib/vyoma/vyoma-agent-vm");
@@ -134,7 +135,7 @@ fn shell_escape(s: &str) -> String {
 /// - `set -e`: Exit on any error
 /// - `set -u`: Treat unset variables as errors
 /// - `trap ERR`: Power off on any error to prevent continuing with broken state
-fn generate_init_script(config: &vyoma_core::oci::OciImageConfig, ip_address: &str, gateway: &str) -> String {
+fn generate_init_script(config: &vyoma_core::oci::OciImageConfig, ip_address: &str, gateway: &str, volumes: &[vyoma_core::api::VolumeMount]) -> String {
     let mut script = String::new();
 
     script.push_str("#!/bin/busybox sh\n");
@@ -185,6 +186,14 @@ fn generate_init_script(config: &vyoma_core::oci::OciImageConfig, ip_address: &s
     script.push_str("/bin/busybox mkdir -p /overlay/upper /overlay/work\n");
     script.push_str("/bin/busybox mkdir -p /sysroot\n");
     script.push_str("/bin/busybox mount -t overlay overlay -o lowerdir=/lower,upperdir=/overlay/upper,workdir=/overlay/work /sysroot\n");
+
+    script.push_str("# Mount virtiofs volumes\n");
+    for (idx, vol) in volumes.iter().enumerate() {
+        let tag = format!("vol{}", idx);
+        let vm_path = shell_escape(&vol.vm_path);
+        script.push_str(&format!("/bin/busybox mkdir -p /sysroot{}\n", vm_path));
+        script.push_str(&format!("/bin/busybox mount -t virtiofs {} /sysroot{} 2>/dev/null || true\n", tag, vm_path));
+    }
 
     script.push_str("# Inject agent into container\n");
     script.push_str("/bin/busybox mkdir -p /sysroot/mnt\n");
@@ -374,6 +383,9 @@ mod tests {
             "/dev/null",
             temp_dir.path(),
             &config,
+            "172.16.0.2",
+            "172.16.0.1",
+            &[],
         ).await;
 
         assert!(result.is_ok());

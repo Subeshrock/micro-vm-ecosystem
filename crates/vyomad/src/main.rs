@@ -46,6 +46,8 @@ fn check_dependencies(data_dir: &str) -> Result<(), String> {
 
     // Check for bundled cloud-hypervisor
     let ch_path = std::path::Path::new(data_dir).join("bin/cloud-hypervisor");
+    println!("DEBUG: Checking if cloud-hypervisor exists at {:?}", ch_path);
+    println!("DEBUG: Metadata: {:?}", std::fs::metadata(&ch_path));
     if !ch_path.exists() {
         // Check in common fallback locations
         let fallback_paths = vec![
@@ -501,7 +503,13 @@ async fn async_main(args: Args) {
                 }
             }
             info!("Dashboard available at http://{}", addr);
-            let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+            let listener = match tokio::net::TcpListener::bind(&addr).await {
+                Ok(l) => l,
+                Err(e) => {
+                    error!("HTTP server failed to bind on {}: {}", addr, e);
+                    return; // exit the spawned task gracefully
+                }
+            };
             loop {
                 match listener.accept().await {
                     Ok((stream, _)) => {

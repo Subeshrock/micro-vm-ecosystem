@@ -868,7 +868,7 @@ async fn main() -> Result<()> {
                 }
             }
         }
-        Commands::Build { path, measured } => {
+        Commands::Build { path, measured, signing_key: _ } => {
             info!("Building image from context: {} (measured={})", path, measured);
             build_image_with_client(&path, &client, &daemon_url, measured).await?;
         }

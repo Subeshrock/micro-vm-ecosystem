@@ -1,11 +1,14 @@
 # Changelog
 
-## [0.6.0] - Upcoming (The Polish Update)
+## [2.9.0] - Upcoming (The Polish Update)
 - **gRPC**: gRPC server now handles port conflicts gracefully. StreamLogs RPC implemented for real-time log streaming.
 - **Lifecycle**: `vyoma restart` (Stop/Run replacement), `vyoma exec` (Agent-based HTTP channel replacing SSH, using statically compiled musl agent).
 - **Monitoring**: Real-time metrics endpoint and `vyoma stats` CLI command to view live CPU and memory usage of running VMs.
 - **Kernel Upgrade**: Replaced the bundled VM kernel with a custom-built Linux v6.1.100 kernel featuring `CONFIG_SQUASHFS=y` and `CONFIG_OVERLAY_FS=y` to ensure container root filesystems are correctly mounted with a writable overlay layer.
 - **Volume Mounts**: Fixed unprivileged loop device attachment by falling back to `losetup`, resolving `Permission denied` errors. Bundled `virtiofsd` directly in the Debian/RPM packages for seamless out-of-the-box volume mounting.
+- **CLI & Daemon**: Added `--version` flag to both `vyoma` and `vyomad`.
+- **Networking**: Fixed DNS log spam during startup by adding retries and reducing log levels.
+- **UI**: Added dynamic daemon version detection in the dashboard UI.
 - **Logging**: `vyoma logs <service>` support.
 - **Inspect**: API for inspecting VM details.
 

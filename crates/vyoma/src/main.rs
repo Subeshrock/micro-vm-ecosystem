@@ -47,6 +47,7 @@ fn resolve_socket_path(default_path: &str) -> String {
 #[derive(Parser)]
 #[command(name = "vyoma")]
 #[command(about = "Vyoma: Docker for Micro-VMs", long_about = None)]
+#[command(version)]
 struct Cli {
     /// Socket path to daemon (Unix Socket)
     #[arg(short, long, global = true, default_value = "/run/vyoma/vyoma.sock")]

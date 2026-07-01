@@ -19,6 +19,7 @@ pub async fn start_dns_server(state: AppState) {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         info!("DNS: Initial delay complete, attempting to bind...");
         
+        let mut retries = 0;
         // Retry loop for binding
         let socket = loop {
             match UdpSocket::bind(&addr).await {
@@ -27,7 +28,15 @@ pub async fn start_dns_server(state: AppState) {
                     break s;
                 },
                 Err(e) => {
-                    warn!("DNS bind failed (interface might not be ready): {}. Retrying in 2s...", e);
+                    retries += 1;
+                    if retries <= 5 {
+                        warn!("DNS bind failed (interface might not be ready): {}. Retrying in 2s...", e);
+                    } else if retries <= 30 {
+                        debug!("DNS bind failed (retry {}/30): {}", retries, e);
+                    } else {
+                        info!("DNS server could not bind after 30 attempts; continuing without DNS");
+                        return;
+                    }
                     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                 }
             }

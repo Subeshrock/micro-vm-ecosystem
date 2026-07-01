@@ -499,8 +499,26 @@ impl BuildRunner {
         self.extract_squashfs(squashfs, temp_dir.path()).await?;
         
         let ext4_str = ext4.to_string_lossy();
+        
+        // Create a 2G sparse file
+        let trunc_out = Command::new("truncate")
+            .args(["-s", "2G", &ext4_str])
+            .output()
+            .map_err(|e| BuildError::ExecutionError(format!("Failed to run truncate: {}", e)))?;
+            
+        if !trunc_out.status.success() {
+            return Err(BuildError::ExecutionError(
+                format!("truncate failed: {}", String::from_utf8_lossy(&trunc_out.stderr))
+            ));
+        }
+            
         let output = Command::new("mkfs.ext4")
-            .args(["-F", "-E", &ext4_str])
+            .args([
+                "-F",
+                "-d",
+                &temp_dir.path().to_string_lossy(),
+                &ext4_str
+            ])
             .output()
             .map_err(|e| BuildError::ExecutionError(format!("Failed to run mkfs.ext4: {}", e)))?;
         
@@ -509,27 +527,6 @@ impl BuildRunner {
                 format!("mkfs.ext4 failed: {}", String::from_utf8_lossy(&output.stderr))
             ));
         }
-        
-        let mount_dir = tempfile::tempdir()
-            .map_err(|e| BuildError::ExecutionError(format!("Failed to create mount dir: {}", e)))?;
-        
-        Command::new("mount")
-            .arg(ext4)
-            .arg(mount_dir.path())
-            .output()
-            .map_err(|e| BuildError::ExecutionError(format!("Failed to mount ext4: {}", e)))?;
-        
-        let cp_result = Command::new("cp")
-            .arg("-a")
-            .arg(temp_dir.path().join("*"))
-            .arg(mount_dir.path())
-            .output();
-        
-        let _ = Command::new("umount")
-            .arg(ext4)
-            .output();
-        
-        cp_result.map_err(|e| BuildError::ExecutionError(format!("Failed to copy files to ext4: {}", e)))?;
         
         Ok(())
     }

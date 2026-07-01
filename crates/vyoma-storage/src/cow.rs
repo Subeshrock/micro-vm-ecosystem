@@ -56,46 +56,50 @@ impl LoopManager {
         
         let mut retries = 0;
         let _ld = loop {
-            match self.control.next_free() {
+            let next_free_result = self.control.next_free();
+            let attach_result = match next_free_result {
                 Ok(ld) => {
-                    let attach_result = ld.with().read_only(readonly).attach(file);
-                    match attach_result {
+                    let res = ld.with().read_only(readonly).attach(file);
+                    match res {
                         Ok(()) => return Ok(LoopDevice::new(ld.path().unwrap(), Some(ld))),
-                        Err(e) if e.raw_os_error() == Some(13) => {
-                            warn!("loopdev attach failed with EACCES, falling back to losetup...");
-                            let mut cmd = std::process::Command::new("losetup");
-                            cmd.arg("-f").arg("--show");
-                            if readonly {
-                                cmd.arg("-r");
-                            }
-                            cmd.arg(file);
-                            match cmd.output() {
-                                Ok(output) if output.status.success() => {
-                                    let stdout = String::from_utf8_lossy(&output.stdout);
-                                    let dev_path = stdout.trim();
-                                    info!("losetup fallback succeeded: {}", dev_path);
-                                    return Ok(LoopDevice::new(std::path::PathBuf::from(dev_path), None));
-                                }
-                                Ok(output) => {
-                                    error!("losetup fallback failed: {}", String::from_utf8_lossy(&output.stderr));
-                                    if retries < 50 {
-                                        std::thread::sleep(std::time::Duration::from_millis(20));
-                                        retries += 1;
-                                        continue;
-                                    }
-                                    return Err(StorageError::Io(e));
-                                }
-                                Err(err) => {
-                                    error!("Failed to execute losetup: {}", err);
-                                    return Err(StorageError::Io(e));
-                                }
-                            }
-                        }
-                        Err(e) => return Err(StorageError::Io(e)),
+                        Err(e) => Err(e),
                     }
-                }
-                Err(e) => {
-                    error!("Failed to get next free loop device: {:?}", e);
+                },
+                Err(e) => Err(e),
+            };
+
+            if let Err(e) = attach_result {
+                if e.raw_os_error() == Some(13) {
+                    warn!("loopdev failed with EACCES, falling back to losetup...");
+                    let mut cmd = std::process::Command::new("losetup");
+                    cmd.arg("-f").arg("--show");
+                    if readonly {
+                        cmd.arg("-r");
+                    }
+                    cmd.arg(file);
+                    match cmd.output() {
+                        Ok(output) if output.status.success() => {
+                            let stdout = String::from_utf8_lossy(&output.stdout);
+                            let dev_path = stdout.trim();
+                            info!("losetup fallback succeeded: {}", dev_path);
+                            return Ok(LoopDevice::new(std::path::PathBuf::from(dev_path), None));
+                        }
+                        Ok(output) => {
+                            error!("losetup fallback failed: {}", String::from_utf8_lossy(&output.stderr));
+                            if retries < 50 {
+                                std::thread::sleep(std::time::Duration::from_millis(20));
+                                retries += 1;
+                                continue;
+                            }
+                            return Err(StorageError::Io(e));
+                        }
+                        Err(err) => {
+                            error!("Failed to execute losetup: {}", err);
+                            return Err(StorageError::Io(e));
+                        }
+                    }
+                } else {
+                    error!("loopdev operation failed: {:?}", e);
                     return Err(StorageError::Io(e));
                 }
             }

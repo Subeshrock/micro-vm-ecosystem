@@ -181,6 +181,10 @@ enum Commands {
         /// Perform measured build: launch ephemeral VM to pre-compute PCR values
         #[arg(long)]
         measured: bool,
+
+        /// Path to public key for signing the manifest
+        #[arg(long)]
+        signing_key: Option<String>,
     },
     /// Check system dependencies and environment health
     Doctor,

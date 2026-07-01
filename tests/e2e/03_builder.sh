@@ -22,6 +22,9 @@ RUN echo "Vyoma Build Test" > /build_test.txt
 CMD ["sleep", "60"]
 EOF
 
+echo "Pulling base image..."
+$VYOMA pull alpine:latest 2>/dev/null || true
+
 echo "Building Image..."
 OUTPUT=$($VYOMA build $CTX 2>&1)
 echo "$OUTPUT"

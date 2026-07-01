@@ -826,8 +826,7 @@ pub async fn build_image(
 
     // 4. Generate build ID and prepare work directory
     let build_id = uuid::Uuid::new_v4().to_string();
-    let home = dirs::home_dir().ok_or((StatusCode::INTERNAL_SERVER_ERROR, "No home dir".into()))?;
-    let work_dir = home.join(".vyoma").join("builds");
+    let work_dir = std::path::PathBuf::from(&state.data_dir);
     std::fs::create_dir_all(&work_dir)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 

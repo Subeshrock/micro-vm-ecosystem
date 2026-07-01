@@ -11,7 +11,7 @@ else
     exit 1
 fi
 
-VERSION="2.8.0"
+VERSION="2.9.0"
 WORK_DIR="target/rpm"
 SOURCES_DIR="${WORK_DIR}/SOURCES/vyoma-${VERSION}"
 
@@ -134,8 +134,37 @@ cp kernel.bzimage "${SOURCES_DIR}/bin/vmlinux"
 chmod 644 "${SOURCES_DIR}/bin/vmlinux"
 echo "Kernel binary bundled"
 
-# Bundle virtiofsd (from system or project bin)
-if [ -f "bin/virtiofsd" ] && [ ! -L "bin/virtiofsd" ]; then
+# Bundle virtiofsd
+VIRTIOFSD_VERSION="1.11.1"
+echo "Fetching virtiofsd..."
+if [ ! -f "virtiofsd_bin" ]; then
+    PRIMARY_URL="https://gitlab.com/virtio-fs/virtiofsd/-/releases/${VIRTIOFSD_VERSION}/downloads/virtiofsd-v${VIRTIOFSD_VERSION}-x86_64-musl.zip"
+    if wget -q -O virtiofsd.zip "$PRIMARY_URL" 2>/dev/null; then
+        unzip -q -o virtiofsd.zip
+        mv virtiofsd virtiofsd_bin 2>/dev/null || true
+        chmod +x virtiofsd_bin 2>/dev/null || true
+    fi
+fi
+if [ ! -f "virtiofsd_bin" ]; then
+    FALLBACK_URL1="https://github.com/qemu/qemu/raw/main/contrib/virtiofsd/virtiofsd-x86_64"
+    if wget -q -O virtiofsd "$FALLBACK_URL1" 2>/dev/null; then
+        mv virtiofsd virtiofsd_bin
+        chmod +x virtiofsd_bin
+    fi
+fi
+if [ ! -f "virtiofsd_bin" ]; then
+    FALLBACK_URL2="https://raw.githubusercontent.com/qemu/qemu/master/contrib/virtiofsd/virtiofsd-x86_64"
+    if wget -q -O virtiofsd "$FALLBACK_URL2" 2>/dev/null; then
+        mv virtiofsd virtiofsd_bin
+        chmod +x virtiofsd_bin
+    fi
+fi
+
+if [ -f "virtiofsd_bin" ]; then
+    cp virtiofsd_bin "${SOURCES_DIR}/virtiofsd"
+    chmod +x "${SOURCES_DIR}/virtiofsd"
+    echo "virtiofsd fetched successfully"
+elif [ -f "bin/virtiofsd" ] && [ ! -L "bin/virtiofsd" ]; then
     cp bin/virtiofsd "${SOURCES_DIR}/virtiofsd"
     chmod +x "${SOURCES_DIR}/virtiofsd"
     echo "virtiofsd bundled from project bin"

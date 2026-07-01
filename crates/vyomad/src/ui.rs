@@ -13,11 +13,17 @@ pub struct Assets;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-fn inject_meta(html: String, token: &str, version: &str) -> String {
-    let tags = format!(
-        r#"<meta name="vyoma-api-token" content="{}"><meta name="vyoma-daemon-version" content="{}">"#,
-        token, version
+fn inject_meta(html: String, token: Option<&String>, version: &str) -> String {
+    let mut tags = format!(
+        r#"<meta name="vyoma-daemon-version" content="{}">"#,
+        version
     );
+    if let Some(t) = token {
+        tags.push_str(&format!(
+            r#"<meta name="vyoma-api-token" content="{}">"#,
+            t
+        ));
+    }
     html.replace("</head>", &format!("{}</head>", tags))
 }
 
@@ -29,16 +35,14 @@ pub async fn ui_handler(
     let path = if path.is_empty() { "index.html" } else { path };
 
     let is_html = path.ends_with(".html") || path == "index.html";
-    let should_inject = is_html && state.api_token.is_some();
 
     match Assets::get(path) {
         Some(content) => {
             let mime = mime_guess::from_path(path).first_or_octet_stream();
             
-            let body = if should_inject {
-                let token = state.api_token.as_ref().unwrap();
+            let body = if is_html {
                 let html = String::from_utf8_lossy(&content.data.to_vec()).into_owned();
-                let modified = inject_meta(html, token, VERSION);
+                let modified = inject_meta(html, state.api_token.as_ref(), VERSION);
                 Body::from(modified)
             } else {
                 Body::from(content.data.to_vec())
@@ -57,14 +61,9 @@ pub async fn ui_handler(
             // Otherwise fallback to index.html (SPA)
              match Assets::get("index.html") {
                 Some(content) => {
-                    let body = if state.api_token.is_some() {
-                        let token = state.api_token.as_ref().unwrap();
-                        let html = String::from_utf8_lossy(&content.data.to_vec()).into_owned();
-                        let modified = inject_meta(html, token, VERSION);
-                        Body::from(modified)
-                    } else {
-                        Body::from(content.data.to_vec())
-                    };
+                    let html = String::from_utf8_lossy(&content.data.to_vec()).into_owned();
+                    let modified = inject_meta(html, state.api_token.as_ref(), VERSION);
+                    let body = Body::from(modified);
                     
                     Response::builder()
                         .header(header::CONTENT_TYPE, "text/html")

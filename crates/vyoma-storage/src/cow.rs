@@ -57,7 +57,7 @@ impl LoopManager {
         let mut retries = 0;
         let _ld = loop {
             let next_free_result = self.control.next_free();
-            let attach_result = match next_free_result {
+            let attach_result: std::io::Result<LoopDevice> = match next_free_result {
                 Ok(ld) => {
                     let res = ld.with().read_only(readonly).attach(file);
                     match res {
@@ -178,7 +178,7 @@ impl LoopManager {
     
     pub fn list_devices(&self) -> Result<Vec<LoopDevice>> {
         info!("Listing loop devices");
-        let mut devices = Vec::new();
+        let devices = Vec::new();
         // Since list_devices isn't trivially exposed or needed safely right now, we keep it minimum
         Ok(devices)
     }

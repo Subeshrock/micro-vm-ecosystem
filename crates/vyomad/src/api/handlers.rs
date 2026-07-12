@@ -628,11 +628,12 @@ pub struct PullRequest {
 }
 
 pub async fn pull_image_handler(
+    State(state): State<AppState>,
     Json(payload): Json<PullRequest>,
 ) -> Result<Json<PullResponse>, (StatusCode, String)> {
     info!("Handling Pull request for {}", payload.image);
 
-    let path = ensure_image_locally_handler(&payload.image).await?;
+    let path = ensure_image_locally_handler(&payload.image, &state.data_dir).await?;
 
     Ok(Json(PullResponse {
         status: "Image pulled successfully".to_string(),

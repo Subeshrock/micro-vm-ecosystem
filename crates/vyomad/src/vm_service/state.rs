@@ -12,7 +12,7 @@ pub async fn save_vm_state(
     instance: VmInstance,
     vm_id: String,
 ) -> Result<()> {
-    instance.save_state().context("Failed to save state")?;
+    instance.save_state(&state.data_dir).context("Failed to save state")?;
 
     {
         let mut vms = state.vms.lock().await;
@@ -37,8 +37,8 @@ pub async fn load_vm_state(
     _state: &AppState,
     vm_id: &str,
 ) -> Result<Option<VmInstance>> {
-    let home = dirs::home_dir().context("No home dir")?;
-    let state_file = home.join(".vyoma").join("vms").join(vm_id).join("state.json");
+    let data_dir = PathBuf::from(&_state.data_dir);
+    let state_file = data_dir.join(".vyoma").join("vms").join(vm_id).join("state.json");
     
     if !state_file.exists() {
         return Ok(None);
@@ -151,8 +151,8 @@ pub async fn snapshot_vm(
             tm.create_snapshot(vm_id.to_string(), label.or_else(|| Some(format!("Manual snapshot for {}", vm_id))))
         };
 
-        let home = dirs::home_dir().context("No home dir")?;
-        let vm_dir = home.join(".vyoma").join("vms").join(vm_id);
+        let data_dir = PathBuf::from(&state.data_dir);
+        let vm_dir = data_dir.join(".vyoma").join("vms").join(vm_id);
         let snaps_dir = vm_dir.join("snapshots").join(&entry.id);
         
         std::fs::create_dir_all(&snaps_dir).context("Failed to create snapshots dir")?;
@@ -198,8 +198,8 @@ pub async fn commit_vm(
 
     let src_device = PathBuf::from(format!("/dev/mapper/{}", dm_name));
     
-    let home = dirs::home_dir().context("No home dir")?;
-    let images_dir = home.join(".vyoma").join("images").join(new_image_name);
+    let data_dir = PathBuf::from(&state.data_dir);
+    let images_dir = data_dir.join(".vyoma").join("images").join(new_image_name);
     
     std::fs::create_dir_all(&images_dir).context("Failed to create images dir")?;
     let dst_file = images_dir.join("root.ext4");

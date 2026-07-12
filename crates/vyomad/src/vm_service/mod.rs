@@ -82,8 +82,8 @@ impl VmCreationContext {
 pub async fn run_vm(state: Arc<AppState>, request: VmRunRequest) -> Result<VmRunResponse> {
     info!("VmService: Starting VM for image {}", request.image);
 
-    let home = dirs::home_dir().context("No home dir")?;
-    let vyoma_root = home.join(".vyoma");
+    let data_dir = std::path::PathBuf::from(&state.data_dir);
+    let vyoma_root = data_dir.join(".vyoma");
     let images_root = vyoma_root.join("images");
     let vms_root = vyoma_root.join("vms");
 
@@ -100,7 +100,7 @@ pub async fn run_vm(state: Arc<AppState>, request: VmRunRequest) -> Result<VmRun
 
     std::fs::create_dir_all(&vm_dir).context("Failed to create VM dir")?;
 
-    let prepared_image = match image::prepare_image(&request.image).await {
+    let prepared_image = match image::prepare_image(&request.image, &state.data_dir).await {
         Ok(img) => img,
         Err(e) => {
             ctx.cleanup_on_failure().await;
@@ -266,7 +266,7 @@ pub async fn run_vm(state: Arc<AppState>, request: VmRunRequest) -> Result<VmRun
         last_cpu_sample: None,
     };
 
-    instance.save_state().context("Failed to save state")?;
+    instance.save_state(&state.data_dir).context("Failed to save state")?;
 
     let status_string = match &instance.status {
         VmStatus::PendingAttestation => "PendingAttestation".to_string(),

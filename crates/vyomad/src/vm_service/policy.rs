@@ -562,7 +562,7 @@ pub async fn update_vm_status(state: &AppState, vm_id: &str, new_status: VmStatu
     // Save updated state to disk
     {
         let vm = vm_arc.lock().await;
-        vm.save_state()
+        vm.save_state(&state.data_dir)
             .map_err(|e| format!("Failed to save VM state: {}", e))?;
     }
 

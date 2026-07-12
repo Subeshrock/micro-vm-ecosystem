@@ -159,7 +159,7 @@ use vyoma_core::network::NetworkManager;
 use vyoma_core::storage::StorageManager;
 
 impl VmInstance {
-    pub fn save_state(&self) -> anyhow::Result<()> {
+    pub fn save_state(&self, data_dir: &str) -> anyhow::Result<()> {
         let state = VmState {
             id: self.id.clone(),
             tap_name: self.tap_name.clone(),
@@ -180,8 +180,7 @@ impl VmInstance {
             status: self.status.clone(),
         };
 
-        let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("No home dir"))?;
-        let vm_dir = home.join(".vyoma").join("vms").join(&self.id);
+        let vm_dir = std::path::PathBuf::from(data_dir).join(".vyoma").join("vms").join(&self.id);
         if !vm_dir.exists() {
             std::fs::create_dir_all(&vm_dir)?;
         }

@@ -8,9 +8,8 @@ use vyoma_image::{VmifConverter, VmifManifest, OciImageConfig as VyomaOciConfig,
 
 use super::types::PreparedImage;
 
-pub async fn ensure_image_locally(image_name: &str) -> Result<PathBuf> {
-    let home = dirs::home_dir().context("No home dir")?;
-    let images_root = home.join(".vyoma").join("images");
+pub async fn ensure_image_locally(image_name: &str, data_dir: &str) -> Result<PathBuf> {
+    let images_root = PathBuf::from(data_dir).join(".vyoma").join("images");
     std::fs::create_dir_all(&images_root)?;
 
     let safe_image_name = image_name.replace('/', "_").replace(':', "_");
@@ -87,9 +86,8 @@ pub async fn ensure_image_locally(image_name: &str) -> Result<PathBuf> {
     Ok(rootfs_sqfs_path)
 }
 
-pub async fn load_vmif_manifest(image_name: &str) -> Result<VmifManifest> {
-    let home = dirs::home_dir().context("No home dir")?;
-    let images_root = home.join(".vyoma").join("images");
+pub async fn load_vmif_manifest(image_name: &str, data_dir: &str) -> Result<VmifManifest> {
+    let images_root = PathBuf::from(data_dir).join(".vyoma").join("images");
     
     let safe_image_name = image_name.replace('/', "_").replace(':', "_");
     let image_store_path = images_root.join(&safe_image_name);
@@ -106,12 +104,14 @@ pub trait ImageProvider: Send + Sync {
     async fn get_vmif_manifest(&self, image_name: &str) -> Result<Option<vyoma_image::VmifManifest>>;
 }
 
-pub struct OciImageProvider;
+pub struct OciImageProvider {
+    pub data_dir: String,
+}
 
 #[async_trait]
 impl ImageProvider for OciImageProvider {
     async fn fetch_image(&self, image_name: &str) -> Result<PathBuf> {
-        ensure_image_locally(image_name).await
+        ensure_image_locally(image_name, &self.data_dir).await
     }
 
     async fn get_config(&self, image_path: &PathBuf) -> Result<vyoma_core::oci::OciImageConfig> {
@@ -119,7 +119,7 @@ impl ImageProvider for OciImageProvider {
     }
 
     async fn get_vmif_manifest(&self, image_name: &str) -> Result<Option<vyoma_image::VmifManifest>> {
-        match load_vmif_manifest(image_name).await {
+        match load_vmif_manifest(image_name, &self.data_dir).await {
             Ok(m) => Ok(Some(m)),
             Err(_) => Ok(None),
         }
@@ -128,14 +128,14 @@ impl ImageProvider for OciImageProvider {
 
 pub struct CachedImageProvider {
     cache_dir: PathBuf,
+    data_dir: String,
 }
 
 impl CachedImageProvider {
-    pub fn new() -> Result<Self> {
-        let home = dirs::home_dir().context("No home dir")?;
-        let cache_dir = home.join(".vyoma").join("images");
+    pub fn new(data_dir: &str) -> Result<Self> {
+        let cache_dir = PathBuf::from(data_dir).join(".vyoma").join("images");
         std::fs::create_dir_all(&cache_dir)?;
-        Ok(Self { cache_dir })
+        Ok(Self { cache_dir, data_dir: data_dir.to_string() })
     }
 
     pub fn get_cached_path(&self, image_name: &str) -> Option<PathBuf> {
@@ -158,7 +158,7 @@ impl ImageProvider for CachedImageProvider {
             info!("Using cached VMIF image for {}", image_name);
             return Ok(cached);
         }
-        ensure_image_locally(image_name).await
+        ensure_image_locally(image_name, &self.data_dir).await
     }
 
     async fn get_config(&self, image_path: &PathBuf) -> Result<vyoma_core::oci::OciImageConfig> {
@@ -166,15 +166,15 @@ impl ImageProvider for CachedImageProvider {
     }
 
     async fn get_vmif_manifest(&self, image_name: &str) -> Result<Option<vyoma_image::VmifManifest>> {
-        match load_vmif_manifest(image_name).await {
+        match load_vmif_manifest(image_name, &self.data_dir).await {
             Ok(m) => Ok(Some(m)),
             Err(_) => Ok(None),
         }
     }
 }
 
-pub async fn prepare_image(image_name: &str) -> Result<PreparedImage> {
-    prepare_image_with_provider(image_name, &OciImageProvider).await
+pub async fn prepare_image(image_name: &str, data_dir: &str) -> Result<PreparedImage> {
+    prepare_image_with_provider(image_name, &OciImageProvider { data_dir: data_dir.to_string() }).await
 }
 
 pub fn resolve_kernel_from_manifest(manifest: &Option<vyoma_image::VmifManifest>, data_dir: &str) -> Option<PathBuf> {
@@ -254,8 +254,9 @@ pub fn extract_oci_config(image_path: &std::path::Path) -> Result<vyoma_core::oc
 
 pub async fn ensure_image_locally_handler(
     image_name: &str,
+    data_dir: &str,
 ) -> Result<std::path::PathBuf, (axum::http::StatusCode, String)> {
-    ensure_image_locally(image_name)
+    ensure_image_locally(image_name, data_dir)
         .await
         .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }

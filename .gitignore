@@ -33,6 +33,9 @@ ui/dist/
 #repomix
 .repomixignore
 repomix.config.json
-# repomix-output.txt
+repomix-output.txt
+
+# Binaries
+cloud-hypervisor
 
 .env

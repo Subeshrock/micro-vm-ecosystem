@@ -165,6 +165,21 @@ impl DmManager {
             .output();
 
         let path = PathBuf::from(format!("/dev/mapper/{}", name));
+        
+        // Wait for the snapshot device node to appear
+        for _ in 0..50 {
+            if path.exists() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        if !path.exists() {
+            return Err(StorageError::Other(format!(
+                "Snapshot device {} did not appear after waiting",
+                path.display()
+            )));
+        }
+
         Ok(DmDevice::new(name.to_string(), path))
     }
     

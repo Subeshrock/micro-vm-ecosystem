@@ -248,7 +248,7 @@ impl BuildRunner {
             "--memory".to_string(),
             "size=512M".to_string(),
             "--cpus".to_string(),
-            "1".to_string(),
+            "boot=1".to_string(),
             "--console".to_string(),
             "off".to_string(),
             "--serial".to_string(),
@@ -288,7 +288,7 @@ impl BuildRunner {
         info!("Launching measurement VM with args: {:?}", ch_args);
 
         // 3. Launch Cloud Hypervisor
-        let mut child = Command::new("cloud-hypervisor")
+        let mut child = Command::new(self.find_ch_path()?)
             .args(&ch_args)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -372,12 +372,12 @@ impl BuildRunner {
     async fn handle_from(&self, image: &str) -> Result<PathBuf, BuildError> {
         // For now, we'll assume the image is already available locally
         // In a real implementation, this would call ensure_image_locally
-        let image_path = self.work_dir.join("images").join(image.replace('/', "_").replace(':', "_"));
+        let image_path = self.work_dir.join(".vyoma").join("images").join(image.replace('/', "_").replace(':', "_"));
         let rootfs_path = image_path.join("rootfs.sqfs");
 
         if !rootfs_path.exists() {
             return Err(BuildError::ExecutionError(
-                format!("Base image {} not found", image)
+                format!("Base image {} not found at {:?}", image, rootfs_path)
             ));
         }
 
@@ -394,9 +394,18 @@ impl BuildRunner {
         
         let result = self.execute_build_in_vm(rootfs_path, command, &build_dir).await;
         
-        let _ = std::fs::remove_dir_all(&build_dir);
-        
-        result
+        if let Ok(layer_path) = result {
+            let final_layer = self.temp_dir.join(format!("layer_{}.sqfs", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)));
+            if let Err(e) = std::fs::rename(&layer_path, &final_layer) {
+                let _ = std::fs::remove_dir_all(&build_dir);
+                return Err(BuildError::ExecutionError(format!("Failed to preserve layer: {}", e)));
+            }
+            let _ = std::fs::remove_dir_all(&build_dir);
+            Ok(final_layer)
+        } else {
+            let _ = std::fs::remove_dir_all(&build_dir);
+            result
+        }
     }
     
     async fn execute_build_in_vm(
@@ -454,11 +463,8 @@ impl BuildRunner {
 
         let vm_result = self.run_command_in_ch(&dm_dev.path().to_path_buf(), command, build_dir, cgroup_id).await;
 
-        let _ = std::fs::remove_file(&ext4_path);
-        let _ = std::fs::remove_file(&cow_path);
-
         let cgroup_id_to_store = if self.cgroups.is_some() {
-            Some(cgroup_vm_id)
+            Some(cgroup_vm_id.clone())
         } else {
             None
         };
@@ -470,9 +476,7 @@ impl BuildRunner {
             None,
         );
 
-        drop(guard);
-
-        match vm_result {
+        let res = match vm_result {
             Ok((0, _)) => {
                 info!("Creating new squashfs layer from DM device");
                 let dm_device_path = PathBuf::from(format!("/dev/mapper/{}", dm_name));
@@ -489,7 +493,14 @@ impl BuildRunner {
                 format!("Build command failed with exit code {}", code)
             )),
             Err(e) => Err(e),
-        }
+        };
+
+        // Explicitly drop guard here to clean up loops/dm before returning
+        drop(guard);
+        
+        let _ = std::fs::remove_file(&cow_path);
+        
+        res
     }
     
     async fn squashfs_to_ext4(&self, squashfs: &Path, ext4: &Path) -> Result<(), BuildError> {
@@ -553,11 +564,24 @@ impl BuildRunner {
         let mount_dir = tempfile::tempdir()
             .map_err(|e| BuildError::ExecutionError(format!("Failed to create mount dir: {}", e)))?;
         
-        Command::new("mount")
-            .arg(ext4)
-            .arg(mount_dir.path())
-            .output()
-            .map_err(|e| BuildError::ExecutionError(format!("Failed to mount ext4: {}", e)))?;
+        let ext4_c = std::ffi::CString::new(ext4.to_string_lossy().as_bytes())
+            .map_err(|e| BuildError::ExecutionError(format!("CString error: {}", e)))?;
+        let mount_dir_c = std::ffi::CString::new(mount_dir.path().to_string_lossy().as_bytes())
+            .map_err(|e| BuildError::ExecutionError(format!("CString error: {}", e)))?;
+        let fstype_c = std::ffi::CString::new("ext4").unwrap();
+        
+        let res = unsafe {
+            libc::mount(
+                ext4_c.as_ptr(),
+                mount_dir_c.as_ptr(),
+                fstype_c.as_ptr(),
+                0,
+                std::ptr::null(),
+            )
+        };
+        if res != 0 {
+            return Err(BuildError::ExecutionError(format!("mount syscall failed: {}", std::io::Error::last_os_error())));
+        }
         
         let output = Command::new("mksquashfs")
             .arg(mount_dir.path())
@@ -565,13 +589,20 @@ impl BuildRunner {
             .arg("-comp")
             .arg("zstd")
             .arg("-quiet")
-            .output();
+            .output()
+            .map_err(|e| BuildError::ExecutionError(format!("Failed to execute mksquashfs: {}", e)))?;
         
-        let _ = Command::new("umount")
-            .arg(ext4)
-            .output();
+        let res_umount = unsafe {
+            libc::umount(mount_dir_c.as_ptr())
+        };
+        if res_umount != 0 {
+            tracing::warn!("umount syscall failed: {}", std::io::Error::last_os_error());
+        }
         
-        output.map_err(|e| BuildError::ExecutionError(format!("mksquashfs failed: {}", e)))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(BuildError::ExecutionError(format!("mksquashfs failed: {}", stderr)));
+        }
         
         Ok(())
     }
@@ -603,12 +634,14 @@ impl BuildRunner {
             "--api-socket".to_string(),
             socket_path.to_string_lossy().to_string(),
             "--cpus".to_string(),
-            "1".to_string(),
+            "boot=1".to_string(),
             "--memory".to_string(),
             "size=512M".to_string(),
+            "--cmdline".to_string(),
+            "console=ttyS0 reboot=k panic=1 quiet".to_string(),
         ];
 
-        let mut child = Command::new("cloud-hypervisor")
+        let mut child = Command::new(self.find_ch_path()?)
             .args(&ch_args)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -641,12 +674,33 @@ impl BuildRunner {
 
         let timeout_duration = Duration::from_secs(300);
         let exit_status = timeout(timeout_duration, async {
-            child.wait()
+            loop {
+                if let Ok(Some(status)) = child.try_wait() {
+                    return Ok::<_, std::io::Error>(status);
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
         }).await
         .map_err(|_| BuildError::VmError("VM execution timed out".to_string()))?
         .map_err(|e| BuildError::VmError(format!("VM process error: {}", e)))?;
 
         let code = exit_status.code().unwrap_or(1);
+        if code != 0 {
+            if let Some(mut stderr) = child.stderr.take() {
+                use std::io::Read;
+                let mut buf = String::new();
+                if stderr.read_to_string(&mut buf).is_ok() {
+                    error!("Cloud Hypervisor failed. stderr: {}", buf);
+                }
+            }
+            if let Some(mut stdout) = child.stdout.take() {
+                use std::io::Read;
+                let mut buf = String::new();
+                if stdout.read_to_string(&mut buf).is_ok() {
+                    error!("Cloud Hypervisor failed. stdout: {}", buf);
+                }
+            }
+        }
         info!("Build VM exited with code: {}", code);
         Ok((code, Some(pid)))
     }
@@ -672,7 +726,7 @@ impl BuildRunner {
 
         // Launch Cloud Hypervisor
         info!("Starting Cloud Hypervisor with args: {:?}", ch_args);
-        let mut child = Command::new("cloud-hypervisor")
+        let mut child = Command::new(self.find_ch_path()?)
             .args(&ch_args)
             .spawn()
             .map_err(|e| BuildError::VmError(format!("Failed to start Cloud Hypervisor: {}", e)))?;
@@ -706,27 +760,50 @@ impl BuildRunner {
         let initramfs_path = self.temp_dir.join("build-initramfs.cpio.gz");
 
         // Generate build-specific init script
-        let init_script = format!(r#"#!/bin/sh
-# Build init script - runs command and exits
+        let init_script = format!(r#"#!/bin/busybox sh
+
+/bin/busybox mount -t proc proc /proc
+/bin/busybox mount -t sysfs sys /sys
+/bin/busybox mount -t devtmpfs dev /dev
+
+# Wait for the target root filesystem to appear (max 50 tries)
+tries=0
+while [ ! -b /dev/vda ]; do
+    /bin/busybox sleep 0.1
+    tries=$((tries + 1))
+    if [ $tries -ge 50 ]; then
+        echo "Build VM: Timed out waiting for /dev/vda"
+        echo "Build VM: Contents of /dev:"
+        /bin/busybox ls -la /dev
+        /bin/busybox poweroff -f
+        exit 1
+    fi
+done
+
+/bin/busybox mkdir -p /mnt/root
+/bin/busybox mount /dev/vda /mnt/root
+
+# Mount essential filesystems for chroot
+/bin/busybox mount -t proc proc /mnt/root/proc
+/bin/busybox mount -t sysfs sys /mnt/root/sys
+/bin/busybox mount --bind /dev /mnt/root/dev
+/bin/busybox mount -t devpts pts /mnt/root/dev/pts 2>/dev/null || true
+
+# Execute the build script inside the root filesystem
+/bin/busybox chroot /mnt/root /bin/sh /vyoma-build.sh
+
+# Power off the VM when done
+/bin/busybox poweroff -f
+echo "Build VM: Executing command..."
+
+cat > /mnt/root/vyoma-build.sh << 'VYOMAEOF'
+#!/bin/sh
 set -e
+{}
+VYOMAEOF
+chmod +x /mnt/root/vyoma-build.sh
 
-# Mount basic filesystems
-mount -t proc proc /proc 2>/dev/null || true
-mount -t sysfs sys /sys 2>/dev/null || true
-mount -t devtmpfs dev /dev 2>/dev/null || true
-
-# Mount the target root filesystem (which is the ext4 disk)
-mkdir -p /mnt/root
-mount -t ext4 /dev/vda /mnt/root
-
-# Bind mount essential filesystems into the chroot
-mount --bind /proc /mnt/root/proc 2>/dev/null || true
-mount --bind /sys /mnt/root/sys 2>/dev/null || true
-mount --bind /dev /mnt/root/dev 2>/dev/null || true
-
-# Execute the build command inside the chroot
-echo "Build VM: Executing command: {}"
-chroot /mnt/root /bin/sh -c "{}"
+chroot /mnt/root /vyoma-build.sh
 
 # Capture exit code
 exit_code=$?
@@ -741,7 +818,7 @@ sync
 
 # Power off (this will cause Cloud Hypervisor to exit)
 poweroff -f
-"#, command, command);
+"#, command);
 
         let busybox_binary_usr = PathBuf::from("/usr/bin/busybox");
         let busybox_binary_lib = PathBuf::from("/var/lib/vyoma/bin/busybox");
@@ -765,20 +842,9 @@ poweroff -f
     }
 
     fn find_kernel_path(&self) -> Result<PathBuf, BuildError> {
-        // self.temp_dir is passed as data_dir
-        let local_kernel_direct = self.temp_dir.join("bin").join("vmlinux");
-        if local_kernel_direct.exists() {
-            return Ok(local_kernel_direct);
-        }
-        
-        // Also check if temp_dir is nested under temp/build-xxx
-        if let Some(temp_dir_parent) = self.temp_dir.parent() {
-            if let Some(data_dir) = temp_dir_parent.parent() {
-                let local_kernel_nested = data_dir.join("bin").join("vmlinux");
-                if local_kernel_nested.exists() {
-                    return Ok(local_kernel_nested);
-                }
-            }
+        let local_kernel = self.work_dir.join("bin").join("vmlinux");
+        if local_kernel.exists() {
+            return Ok(local_kernel);
         }
         
         let kernel_path = PathBuf::from("/usr/lib/vyoma/vmlinux");
@@ -787,6 +853,21 @@ poweroff -f
             Ok(kernel_path)
         } else {
             Err(BuildError::VmError("Kernel not found at /usr/lib/vyoma/vmlinux or local bin".to_string()))
+        }
+    }
+
+    fn find_ch_path(&self) -> Result<PathBuf, BuildError> {
+        let local_ch = self.work_dir.join("bin").join("cloud-hypervisor");
+        if local_ch.exists() {
+            return Ok(local_ch);
+        }
+        
+        let ch_path = PathBuf::from("/usr/bin/cloud-hypervisor");
+
+        if ch_path.exists() {
+            Ok(ch_path)
+        } else {
+            Ok(PathBuf::from("cloud-hypervisor"))
         }
     }
 
@@ -811,7 +892,7 @@ poweroff -f
             "--api-socket".to_string(),
             socket_path.to_string_lossy().to_string(),
             "--cpus".to_string(),
-            "1".to_string(), // Single CPU for builds
+            "boot=1".to_string(), // Single CPU for builds
             "--memory".to_string(),
             "size=512M".to_string(), // 512MB RAM for builds
             "--rng".to_string(),
@@ -907,7 +988,7 @@ poweroff -f
         info!("Finalizing image {}", image_name);
 
         // Create output directory
-        let output_dir = self.work_dir.join("builds").join(image_name.replace('/', "_").replace(':', "_"));
+        let output_dir = self.work_dir.join(".vyoma").join("images").join(image_name.replace('/', "_").replace(':', "_"));
         std::fs::create_dir_all(&output_dir)?;
 
         // Copy the final rootfs

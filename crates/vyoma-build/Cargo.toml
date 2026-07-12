@@ -19,6 +19,7 @@ bincode = "1.3"
 vyoma-core = { path = "../vyoma-core" }
 vyoma-image = { path = "../vyoma-image" }
 vyoma-storage = { path = "../vyoma-storage" }
+libc = "0.2.186"
 
 [dev-dependencies]
 tokio-test = "0.4"

@@ -21,21 +21,27 @@ impl CgroupManager {
         if !path.exists() {
             info!("Creating root cgroup slice: {}", self.root_path);
             fs::create_dir_all(path)?;
+        }
             
-            // Enable controllers in subtree
-            // We usually want cpu, memory, io
-            // Check what is available in root cgroup
-            let controllers_path = Path::new("/sys/fs/cgroup/cgroup.controllers");
-            let available = fs::read_to_string(controllers_path).unwrap_or_default();
-            
-            let mut subtree_control = String::new();
-            if available.contains("cpu") { subtree_control.push_str("+cpu "); }
-            if available.contains("memory") { subtree_control.push_str("+memory "); }
-            if available.contains("io") { subtree_control.push_str("+io "); }
-            
+        // Enable controllers in subtree
+        // We usually want cpu, memory, io
+        // Check what is available in root cgroup
+        let controllers_path = Path::new("/sys/fs/cgroup/cgroup.controllers");
+        let available = fs::read_to_string(controllers_path).unwrap_or_default();
+        
+        let mut subtree_control = String::new();
+        // Split available to match exactly "cpu" and not "cpuset"
+        let avail_list: Vec<&str> = available.split_whitespace().collect();
+        if avail_list.contains(&"cpu") { subtree_control.push_str("+cpu "); }
+        if avail_list.contains(&"memory") { subtree_control.push_str("+memory "); }
+        if avail_list.contains(&"io") { subtree_control.push_str("+io "); }
+        
+        if !subtree_control.is_empty() {
             let control_path = path.join("cgroup.subtree_control");
             if control_path.exists() {
-                 fs::write(control_path, subtree_control.trim())?;
+                 if let Err(e) = fs::write(&control_path, subtree_control.trim()) {
+                     tracing::warn!("Failed to enable cgroup controllers: {}", e);
+                 }
             }
         }
         Ok(())

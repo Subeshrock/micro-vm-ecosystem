@@ -18,6 +18,10 @@ pub fn create_initramfs(
     
     write_cpio_dir(&mut output, "bin", 0o755)?;
     write_cpio_dir(&mut output, "sbin", 0o755)?;
+    write_cpio_dir(&mut output, "dev", 0o755)?;
+    write_cpio_dir(&mut output, "proc", 0o755)?;
+    write_cpio_dir(&mut output, "sys", 0o755)?;
+    write_cpio_dir(&mut output, "mnt", 0o755)?;
 
     
     write_cpio_entry(&mut output, "sbin/vyoma-init", init_script.as_bytes(), 0o755)?;

@@ -715,19 +715,49 @@ mount -t proc proc /proc 2>/dev/null || true
 mount -t sysfs sys /sys 2>/dev/null || true
 mount -t devtmpfs dev /dev 2>/dev/null || true
 
-# Execute the build command
+# Mount the target root filesystem (which is the ext4 disk)
+mkdir -p /mnt/root
+mount -t ext4 /dev/vda /mnt/root
+
+# Bind mount essential filesystems into the chroot
+mount --bind /proc /mnt/root/proc 2>/dev/null || true
+mount --bind /sys /mnt/root/sys 2>/dev/null || true
+mount --bind /dev /mnt/root/dev 2>/dev/null || true
+
+# Execute the build command inside the chroot
 echo "Build VM: Executing command: {}"
-{}
+chroot /mnt/root /bin/sh -c "{}"
 
 # Capture exit code
 exit_code=$?
 echo "Build VM: Command completed with exit code: $exit_code"
 
+# Unmount filesystems safely
+umount /mnt/root/proc 2>/dev/null || true
+umount /mnt/root/sys 2>/dev/null || true
+umount /mnt/root/dev 2>/dev/null || true
+umount /mnt/root 2>/dev/null || true
+sync
+
 # Power off (this will cause Cloud Hypervisor to exit)
 poweroff -f
 "#, command, command);
 
-        vyoma_core::initramfs::create_initramfs(&init_script, None, None, &initramfs_path)
+        let busybox_binary_usr = PathBuf::from("/usr/bin/busybox");
+        let busybox_binary_lib = PathBuf::from("/var/lib/vyoma/bin/busybox");
+        let busybox_path = if busybox_binary_lib.exists() {
+            Some(&busybox_binary_lib as &Path)
+        } else if busybox_binary_usr.exists() {
+            Some(&busybox_binary_usr as &Path)
+        } else {
+            None
+        };
+
+        if busybox_path.is_none() {
+            warn!("Busybox not found at expected locations. Build VM may fail to boot.");
+        }
+
+        vyoma_core::initramfs::create_initramfs(&init_script, None, busybox_path, &initramfs_path)
             .map_err(|e| BuildError::VmError(format!("Failed to create build initramfs: {}", e)))?;
 
         info!("Created build initramfs at: {:?}", initramfs_path);
@@ -735,14 +765,28 @@ poweroff -f
     }
 
     fn find_kernel_path(&self) -> Result<PathBuf, BuildError> {
-        // For now, assume the default kernel location
-        // In a real implementation, this would check multiple locations
+        // self.temp_dir is passed as data_dir
+        let local_kernel_direct = self.temp_dir.join("bin").join("vmlinux");
+        if local_kernel_direct.exists() {
+            return Ok(local_kernel_direct);
+        }
+        
+        // Also check if temp_dir is nested under temp/build-xxx
+        if let Some(temp_dir_parent) = self.temp_dir.parent() {
+            if let Some(data_dir) = temp_dir_parent.parent() {
+                let local_kernel_nested = data_dir.join("bin").join("vmlinux");
+                if local_kernel_nested.exists() {
+                    return Ok(local_kernel_nested);
+                }
+            }
+        }
+        
         let kernel_path = PathBuf::from("/usr/lib/vyoma/vmlinux");
 
         if kernel_path.exists() {
             Ok(kernel_path)
         } else {
-            Err(BuildError::VmError("Kernel not found at /usr/lib/vyoma/vmlinux".to_string()))
+            Err(BuildError::VmError("Kernel not found at /usr/lib/vyoma/vmlinux or local bin".to_string()))
         }
     }
 

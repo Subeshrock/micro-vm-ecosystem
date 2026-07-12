@@ -1,4 +1,3 @@
-pub mod agent_client;
 use anyhow::{Context, Result};
 use vyoma_proto::v1::{
     CreateVmRequest, CreateVmResponse, ExecOutput, ExecRequest, ListVmsResponse,

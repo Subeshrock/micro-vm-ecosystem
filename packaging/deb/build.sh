@@ -11,7 +11,7 @@ else
     exit 1
 fi
 
-VERSION="2.8.0"
+VERSION="2.9.0"
 ARCH="amd64"
 PKG_NAME="vyoma"
 WORK_DIR="target/debian/${PKG_NAME}_${VERSION}_${ARCH}"

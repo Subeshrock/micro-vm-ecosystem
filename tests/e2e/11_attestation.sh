@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 source tests/e2e/common.sh
+trap "cat $TEST_HOME/daemon.log" EXIT
 
 echo "=== Test 11: Attestation / Measured Boot ==="
 

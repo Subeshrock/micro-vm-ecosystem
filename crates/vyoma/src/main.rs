@@ -355,7 +355,7 @@ async fn main() -> Result<()> {
         .build()?;
     
     // Daemon URL for HTTP requests (goes through Unix Socket proxy)
-    let daemon_url = format!("http://localhost:{}", cli.http_port);
+    let daemon_url = format!("http://127.0.0.1:{}", cli.http_port);
 
     match cli.command {
         Commands::Pull { image } => {

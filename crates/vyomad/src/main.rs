@@ -174,10 +174,21 @@ async fn async_main(args: Args) {
     if let Err(e) = cgroups.init() {
         error!("Failed to init cgroups: {}", e);
     }
+    
+    // Ensure cgroup directory is owned by vyoma
+    let _ = std::process::Command::new("chown")
+        .args(&["-R", "vyoma:vyoma", "/sys/fs/cgroup/vyoma.slice"])
+        .status();
+        
+    // Move vyomad into vyoma.slice before dropping privileges
+    let my_pid = std::process::id();
+    if let Err(e) = std::fs::write("/sys/fs/cgroup/vyoma.slice/cgroup.procs", my_pid.to_string()) {
+        tracing::error!("Failed to move vyomad to vyoma.slice: {}", e);
+    }
     let cgroups = Arc::new(cgroups);
 
     // CNI Initialization
-    let home = dirs::home_dir().expect("No home dir");
+    let home = std::path::PathBuf::from(&args.data_dir);
     let cni_config_dir = home.join(".vyoma").join("cni").join("net.d");
     let cni_plugin_dir = home.join(".vyoma").join("cni").join("bin");
 
@@ -225,12 +236,10 @@ async fn async_main(args: Args) {
 
     let timemachine = Arc::new(tokio::sync::RwLock::new(timemachine::TimeMachine::new(&db)));
 
-    let data_dir_path = std::path::PathBuf::from(&args.data_dir);
-
     let node_id = 1u64;
 
     let network_integration = Arc::new(tokio::sync::Mutex::new(Some(
-        crate::swarm::NetworkIntegration::new(data_dir_path.clone())
+        crate::swarm::NetworkIntegration::new(home.clone())
     )));
 
     let mut swarm_raft = crate::swarm::SwarmRaft::new(node_id);

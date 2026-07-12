@@ -85,7 +85,7 @@ enum Commands {
         #[arg(short, long)]
         ports: Vec<String>,
 
-        /// Volume mounts (e.g. -v /home/user/app:/app)
+        /// Volume mounts (e.g. -v /home/user/app:/app). WARNING: The host path MUST be accessible by the 'vyoma' user, otherwise the mount will silently fail or deny access. Use /tmp or chmod 777 for testing.
         #[arg(short, long)]
         volumes: Vec<String>,
 

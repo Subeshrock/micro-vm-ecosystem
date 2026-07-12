@@ -224,7 +224,74 @@ impl VmService for GrpcVmService {
         &self,
         request: Request<ExecRequest>,
     ) -> Result<Response<Self::ExecCommandStream>, Status> {
-        Err(Status::unimplemented("Not implemented"))
+        let req_inner = request.into_inner();
+        let vm_id = req_inner.vm_id;
+
+        let vm_ip = {
+            let vms = self.state.vms.lock().await;
+            if let Some(vm_arc) = vms.get(&vm_id) {
+                let vm = vm_arc.lock().await;
+                vm.ip_address.clone()
+            } else {
+                return Err(Status::not_found("VM not found"));
+            }
+        };
+
+        let target_ip = vm_ip.split('/').next().unwrap_or(&vm_ip).to_string();
+        let target_addr = format!("{}:9999", target_ip);
+        let mut stream_opt = None;
+
+        for attempt in 0..10 {
+            if attempt > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
+            if let Ok(Ok(s)) = tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                tokio::net::TcpStream::connect(&target_addr),
+            ).await {
+                stream_opt = Some(s);
+                break;
+            }
+        }
+
+        let mut stream = stream_opt.ok_or_else(|| Status::unavailable("Connection to agent failed"))?;
+
+        let agent_req = vyoma_agent_protocol::AgentRequest::ExecCommand {
+            cmd: req_inner.command,
+            env: std::collections::HashMap::new(),
+            workdir: None,
+        };
+
+        let req_json = serde_json::to_vec(&agent_req).map_err(|e| Status::internal(e.to_string()))?;
+        let len_prefix = (req_json.len() as u32).to_be_bytes();
+        
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        stream.write_all(&len_prefix).await.map_err(|e| Status::internal(e.to_string()))?;
+        stream.write_all(&req_json).await.map_err(|e| Status::internal(e.to_string()))?;
+
+        let mut resp_len_buf = [0u8; 4];
+        stream.read_exact(&mut resp_len_buf).await.map_err(|e| Status::internal(e.to_string()))?;
+        let resp_len = u32::from_be_bytes(resp_len_buf) as usize;
+
+        let mut resp_buf = vec![0u8; resp_len];
+        stream.read_exact(&mut resp_buf).await.map_err(|e| Status::internal(e.to_string()))?;
+
+        let resp: vyoma_agent_protocol::AgentResponse = serde_json::from_slice(&resp_buf).map_err(|e| Status::internal(e.to_string()))?;
+
+        match resp {
+            vyoma_agent_protocol::AgentResponse::ExecOutput { stdout, stderr, exit_code } => {
+                let output = ExecOutput {
+                    stdout,
+                    stderr,
+                    exit_code,
+                };
+                let out_stream = futures::stream::iter(vec![Ok(output)]);
+                Ok(Response::new(Box::pin(out_stream) as Self::ExecCommandStream))
+            }
+            vyoma_agent_protocol::AgentResponse::Error { message } => Err(Status::internal(format!("Agent error: {}", message))),
+            _ => Err(Status::internal("Unexpected agent response")),
+        }
     }
 
     type StreamLogsStream = tonic::codegen::BoxStream<LogLine>;

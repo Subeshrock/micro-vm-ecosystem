@@ -96,7 +96,9 @@ impl CompatMatrix {
                         details: None,
                     }
                 } else {
-                    let error_msg = format!("Pull failed with status: {}", response.status());
+                    let status = response.status();
+                    let body = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                    let error_msg = format!("Pull failed with status: {} - {}", status, body);
                     error!("{}", error_msg);
                     TestResult {
                         image: image.to_string(),
@@ -179,7 +181,9 @@ impl CompatMatrix {
                         },
                     }
                 } else {
-                    let error_msg = format!("VM start failed with status: {}", response.status());
+                    let status = response.status();
+                    let body = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                    let error_msg = format!("VM start failed with status: {} - {}", status, body);
                     error!("{}", error_msg);
                     TestResult {
                         image: image.to_string(),

@@ -29,15 +29,15 @@ export function NetworksPage() {
                 <div><Skeleton className="h-4 w-32" /></div>
               </div>
             ))
-          ) : !data?.networks?.length ? (
+          ) : !data?.length ? (
             <EmptyState title="No networks" description="Create a network to get started." icon={<Globe size={48} />} />
           ) : (
-            data.networks.map((n, i) => (
+            data.map((n, i) => (
               <div key={i} className="grid grid-cols-2 gap-4 p-4 text-sm text-foreground">
                 <div className="flex items-center gap-2">
-                  <Globe size={14} className="text-primary" /> {n.name}
+                  <Globe size={14} className="text-primary" /> {n}
                 </div>
-                <div className="font-mono text-muted-foreground">{n.subnet}</div>
+                <div className="font-mono text-muted-foreground">managed</div>
               </div>
             ))
           )}

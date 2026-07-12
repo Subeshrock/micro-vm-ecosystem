@@ -11,7 +11,7 @@ export interface Snapshot {
 export function useSnapshots(vmId: string | null) {
   return useQuery({
     queryKey: ['snapshots', vmId],
-    queryFn: () => api.get<{ snapshots: Snapshot[] }>(`/snapshots/${vmId}`),
+    queryFn: () => api.get<{ snapshots: Snapshot[] }>(`/history/${vmId}`),
     enabled: !!vmId,
   });
 }
@@ -21,7 +21,7 @@ export function useCreateSnapshot() {
   
   return useMutation({
     mutationFn: ({ vmId, name }: { vmId: string; name?: string }) => 
-      api.post(`/snapshots/${vmId}`, { name }),
+      api.post(`/snapshot/${vmId}`, { name }),
     onSuccess: (_, { vmId }) => {
       queryClient.invalidateQueries({ queryKey: ['snapshots', vmId] });
     },
@@ -31,6 +31,6 @@ export function useCreateSnapshot() {
 export function useRestoreSnapshot() {
   return useMutation({
     mutationFn: ({ vmId, snapshotId }: { vmId: string; snapshotId: string }) => 
-      api.post(`/snapshots/${vmId}/restore`, { snapshot_id: snapshotId }),
+      api.post(`/restore`, { vm_id: vmId, snapshot_id: snapshotId }),
   });
 }

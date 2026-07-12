@@ -2,13 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/api-client';
 
 export interface SwarmNode {
-  hostname: string;
-  role: string;
-  ip: string;
-  resources?: {
-    cpu_usage: number;
-    memory_usage_mb: number;
-  };
+  id: number;
+  addr: string;
+  public_key: string;
+  wireguard_key?: string;
+  wireguard_port?: number;
+  subnet_id?: number;
+  is_leader: boolean;
 }
 
 export function useSwarmNodes() {

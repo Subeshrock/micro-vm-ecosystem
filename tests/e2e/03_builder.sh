@@ -26,7 +26,7 @@ echo "Pulling base image..."
 $VYOMA pull alpine:latest 2>/dev/null || true
 
 echo "Building Image..."
-OUTPUT=$($VYOMA build $CTX 2>&1)
+OUTPUT=$($VYOMA build $CTX 2>&1) || { echo "Build failed: $OUTPUT"; exit 1; }
 echo "$OUTPUT"
 assert_success "Build Command"
 
@@ -37,14 +37,10 @@ else
     exit 1
 fi
 
-BUILT_IMAGE_NAME="vyoma:builder-test-$(date +%s)"
-
-echo "Tagging built image for testing..."
-$VYOMA tag "$(echo "$OUTPUT" | grep -oP 'sha256:[a-f0-9]+' | head -1)" "$BUILT_IMAGE_NAME" 2>/dev/null || \
-    $VYOMA tag "vyoma:local-build" "$BUILT_IMAGE_NAME" 2>/dev/null || true
+IMAGE_ID=$(echo "$OUTPUT" | grep -o 'Image ID: [a-f0-9\-]*' | awk '{print $3}' | head -1)
 
 echo "Running built image as VM..."
-VM_ID=$($VYOMA run "$BUILT_IMAGE_NAME" --hostname built-vm --vcpu 1 --memory 128 2>&1)
+VM_ID=$($VYOMA run "$IMAGE_ID" --hostname built-vm --vcpu 1 --memory 128 2>&1)
 VM_ID=$(echo "$VM_ID" | awk -F 'VM ID: ' '{print $2}' | awk '{print $1}' | tr -d ',')
 
 if [ -z "$VM_ID" ]; then

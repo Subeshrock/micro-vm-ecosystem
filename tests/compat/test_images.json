@@ -1,0 +1,11 @@
+{
+  "images": [
+    {
+      "name": "library/alpine:latest",
+      "healthcheck_type": "generic",
+      "healthcheck_cmd": ["echo", "hello"],
+      "expected_exit_code": 0,
+      "description": "Minimal container for basic VM testing"
+    }
+  ]
+}

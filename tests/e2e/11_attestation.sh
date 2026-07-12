@@ -44,7 +44,7 @@ if ! echo "$BUILD_OUTPUT" | grep -qi "measured\|build.*complete"; then
 fi
 
 echo "2. Run VM and verify attestation..."
-VM_OUTPUT=$($VYOMA run alpine:latest --hostname attest-vm --vcpu 1 --memory 128 --measured 2>&1)
+VM_OUTPUT=$($VYOMA run alpine:latest --hostname attest-vm --vcpu 1 --memory 128 --measured 2>&1) || { echo "Run failed: $VM_OUTPUT"; exit 1; }
 VM_ID=$(echo "$VM_OUTPUT" | awk -F 'VM ID: ' '{print $2}' | awk '{print $1}' | tr -d ',')
 
 if [ -z "$VM_ID" ]; then

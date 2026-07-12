@@ -1,4 +1,4 @@
-.PHONY: all agent daemon cli test install_deps
+.PHONY: all agent daemon cli test install_deps install
 
 all: daemon cli agent
 
@@ -20,3 +20,7 @@ cli:
 
 test:
 	cargo test
+
+install:
+	@echo "Running installation script (requires sudo)..."
+	sudo ./scripts/install.sh

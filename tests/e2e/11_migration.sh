@@ -28,7 +28,7 @@ $VYOMA_SOURCE pull alpine:latest 2>/dev/null || true
 $VYOMA_TARGET pull alpine:latest 2>/dev/null || true
 
 echo "2. Run VM on source node..."
-VM_OUTPUT=$($VYOMA_SOURCE run alpine:latest --hostname migrate-vm --vcpu 1 --memory 128 -- sleep 300 2>&1)
+VM_OUTPUT=$($VYOMA_SOURCE run alpine:latest --hostname migrate-vm --vcpu 1 --memory 128 2>&1) || { echo "Run failed: $VM_OUTPUT"; exit 1; }
 VM_ID=$(echo "$VM_OUTPUT" | awk -F 'VM ID: ' '{print $2}' | awk '{print $1}' | tr -d ',')
 
 if [ -z "$VM_ID" ]; then
@@ -91,7 +91,7 @@ fi
 
 echo "5. Test migration failure handling..."
 echo "Creating VM for failure test..."
-VM_FAIL_OUTPUT=$($VYOMA_SOURCE run alpine:latest --hostname migrate-fail --vcpu 1 --memory 128 -- sleep 300 2>&1)
+VM_FAIL_OUTPUT=$($VYOMA_SOURCE run alpine:latest --hostname migrate-fail --vcpu 1 --memory 128 2>&1) || { echo "Run failed: $VM_FAIL_OUTPUT"; exit 1; }
 VM_FAIL_ID=$(echo "$VM_FAIL_OUTPUT" | awk -F 'VM ID: ' '{print $2}' | awk '{print $1}' | tr -d ',')
 
 if [ -z "$VM_FAIL_ID" ]; then
@@ -121,7 +121,7 @@ fi
 echo "6. Test migration progress status..."
 echo "Starting another migration to check status endpoint..."
 
-VM_STATUS_OUTPUT=$($VYOMA_SOURCE run alpine:latest --hostname migrate-status --vcpu 1 --memory 128 -- sleep 300 2>&1)
+VM_STATUS_OUTPUT=$($VYOMA_SOURCE run alpine:latest --hostname migrate-status --vcpu 1 --memory 128 2>&1) || { echo "Run failed: $VM_STATUS_OUTPUT"; exit 1; }
 VM_STATUS_ID=$(echo "$VM_STATUS_OUTPUT" | awk -F 'VM ID: ' '{print $2}' | awk '{print $1}' | tr -d ',')
 
 if [ -z "$VM_STATUS_ID" ]; then

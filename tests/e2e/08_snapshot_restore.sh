@@ -18,7 +18,7 @@ MARKER_FILE="/tmp/snapshot_test_marker"
 rm -f "$MARKER_FILE"
 
 echo "Running long-lived VM with sleep..."
-VM_OUTPUT=$($VYOMA run alpine:latest --hostname snap-vm -- vcpu 1 --memory 128 -- sleep 300 2>&1)
+VM_OUTPUT=$($VYOMA run alpine:latest --hostname snap-vm --vcpu 1 --memory 128 2>&1) || { echo "Run failed: $VM_OUTPUT"; exit 1; }
 VM_ID=$(echo "$VM_OUTPUT" | awk -F 'VM ID: ' '{print $2}' | awk '{print $1}' | tr -d ',')
 
 if [ -z "$VM_ID" ]; then

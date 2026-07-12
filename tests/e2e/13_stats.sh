@@ -50,7 +50,8 @@ STATS_OUT=$($VYOMA stats $VM_ID --no-stream)
 
 echo "$STATS_OUT"
 
-if ! echo "$STATS_OUT" | grep -q "$VM_ID"; then
+SHORT_VM_ID=${VM_ID:0:12}
+if ! echo "$STATS_OUT" | grep -q "$SHORT_VM_ID"; then
     echo "Stats output did not contain VM ID"
     cleanup_env $DAEMON_PID
     exit 1

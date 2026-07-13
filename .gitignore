@@ -1,5 +1,5 @@
 # Rust
-/target/
+target/
 **/*.rs.bk
 Cargo.lock
 
@@ -37,5 +37,6 @@ repomix-output.txt
 
 # Binaries
 cloud-hypervisor
+bin/
 
 .env

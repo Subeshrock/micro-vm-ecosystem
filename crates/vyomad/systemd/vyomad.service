@@ -1,0 +1,16 @@
+[Unit]
+Description=Vyoma Micro-VM Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=vyoma
+Group=vyoma
+ExecStart=/usr/local/bin/vyomad
+Restart=always
+RestartSec=3
+LimitNOFILE=1048576
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target

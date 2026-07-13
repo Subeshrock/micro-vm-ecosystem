@@ -37,9 +37,9 @@ jobs:
             cd ..
 
       - name: Install Packaging Tools
-        run: |
-          cargo install cargo-deb
-          cargo install cargo-generate-rpm
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deb,cargo-generate-rpm
 
       - name: Build Debian Package
         run: make deb

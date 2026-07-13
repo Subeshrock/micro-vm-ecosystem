@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    remove|deconfigure)
+        systemctl stop vyomad.service || true
+        systemctl disable vyomad.service || true
+    ;;
+esac
+
+exit 0

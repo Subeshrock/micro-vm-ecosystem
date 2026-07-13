@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "0" ]; then
+    systemctl stop vyomad.service || true
+    systemctl disable vyomad.service || true
+fi
+exit 0

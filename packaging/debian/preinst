@@ -1,0 +1,25 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    install|upgrade)
+        # Create vyoma group if it doesn't exist
+        if ! getent group "vyoma" > /dev/null; then
+            groupadd --system "vyoma"
+        fi
+
+        # Create vyoma user if it doesn't exist
+        if ! getent passwd "vyoma" > /dev/null; then
+            useradd --system --shell /bin/false -g "vyoma" -d "/var/lib/vyoma" "vyoma"
+        fi
+
+        # Add vyoma user to supplementary groups kvm and disk
+        for grp in kvm disk; do
+            if getent group "$grp" > /dev/null; then
+                usermod -aG "$grp" "vyoma" || true
+            fi
+        done
+    ;;
+esac
+
+exit 0

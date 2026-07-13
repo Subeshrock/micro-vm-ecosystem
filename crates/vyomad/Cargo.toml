@@ -3,6 +3,8 @@ name = "vyomad"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
+license = "Apache-2.0"
+description = "Vyoma Daemon for managing secure virtual machines"
 
 [lib]
 name = "vyomad"
@@ -66,3 +68,33 @@ vyoma-net = { path = "../vyoma-net" }
 [dev-dependencies]
 mockall = "0.14"
 rand = "0.8"
+
+[package.metadata.deb]
+maintainer = "Subeshrock <subesh.rock.3@gmail.com>"
+copyright = "2026, Vyoma Contributors"
+license-file = ["../../LICENSE", "4"]
+depends = "$auto"
+section = "utility"
+priority = "optional"
+assets = [
+    ["target/release/vyomad", "usr/local/bin/vyomad", "755"],
+    ["target/release/vyoma", "usr/local/bin/vyoma", "755"],
+    ["../../bin/vyoma-agent-vm", "var/lib/vyoma/bin/vyoma-agent-vm", "755"],
+    ["../../bin/cloud-hypervisor", "var/lib/vyoma/bin/cloud-hypervisor", "755"],
+    ["../../bin/vmlinux", "var/lib/vyoma/bin/vmlinux", "644"],
+    ["systemd/vyomad.service", "etc/systemd/system/vyomad.service", "644"]
+]
+maintainer-scripts = "../../packaging/debian"
+
+[package.metadata.generate-rpm]
+assets = [
+    { source = "../../target/release/vyomad", dest = "/usr/local/bin/vyomad", mode = "755" },
+    { source = "../../target/release/vyoma", dest = "/usr/local/bin/vyoma", mode = "755" },
+    { source = "../../bin/vyoma-agent-vm", dest = "/var/lib/vyoma/bin/vyoma-agent-vm", mode = "755" },
+    { source = "../../bin/cloud-hypervisor", dest = "/var/lib/vyoma/bin/cloud-hypervisor", mode = "755" },
+    { source = "../../bin/vmlinux", dest = "/var/lib/vyoma/bin/vmlinux", mode = "644" },
+    { source = "systemd/vyomad.service", dest = "/etc/systemd/system/vyomad.service", mode = "644" }
+]
+pre_install_script = "../../packaging/rpm/preinst"
+post_install_script = "../../packaging/rpm/postinst"
+pre_uninstall_script = "../../packaging/rpm/preun"

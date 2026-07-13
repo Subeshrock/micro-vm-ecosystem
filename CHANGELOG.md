@@ -7,6 +7,7 @@
 - **Kernel Upgrade**: Replaced the bundled VM kernel with a custom-built Linux v6.1.100 kernel featuring `CONFIG_SQUASHFS=y` and `CONFIG_OVERLAY_FS=y` to ensure container root filesystems are correctly mounted with a writable overlay layer.
 - **Volume Mounts**: Fixed unprivileged loop device attachment by falling back to `losetup`, resolving `Permission denied` errors. Bundled `virtiofsd` directly in the Debian/RPM packages for seamless out-of-the-box volume mounting.
 - **CLI & Daemon**: Added `--version` flag to both `vyoma` and `vyomad`.
+- **Packaging**: Native `.deb` and `.rpm` packages via `make deb` and `make rpm`, complete with systemd service configuration (`vyomad.service`) and automatic configuration scripts.
 - **Networking**: Fixed DNS log spam during startup by adding retries and reducing log levels.
 - **UI**: Added dynamic daemon version detection in the dashboard UI.
 - **Logging**: `vyoma logs <service>` support.

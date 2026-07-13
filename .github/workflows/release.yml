@@ -36,24 +36,28 @@ jobs:
             npm run build
             cd ..
 
+      - name: Install Packaging Tools
+        run: |
+          cargo install cargo-deb
+          cargo install cargo-generate-rpm
+
       - name: Build Debian Package
-        run: ./packaging/deb/build.sh
+        run: make deb
 
       - name: Build RPM Package
-        run: ./packaging/rpm/build.sh
+        run: make rpm
 
       - name: Verify Packages
         run: |
-          ls -la dist/
-          echo "DEB files:" && ls -la dist/*.deb || echo "No DEB files found"
-          echo "RPM files:" && ls -la dist/*.rpm || echo "No RPM files found"
+          echo "DEB files:" && ls -la target/debian/*.deb || echo "No DEB files found"
+          echo "RPM files:" && ls -la crates/vyomad/target/generate-rpm/*.rpm || echo "No RPM files found"
 
       - name: Create Release & Upload Assets
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            dist/*.deb
-            dist/*.rpm
+            target/debian/*.deb
+            crates/vyomad/target/generate-rpm/*.rpm
           generate_release_notes: true
           draft: false
           prerelease: false
